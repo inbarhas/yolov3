@@ -56,9 +56,11 @@ class YOLO(object):
 
     def _get_anchors(self):
         anchors_path = os.path.expanduser(self.anchors_path)
+        print("model path : {}".format(anchors_path))
         with open(anchors_path) as f:
             anchors = f.readline()
         anchors = [float(x) for x in anchors.split(',')]
+        print("using anchors : {}", str(anchors))
         return np.array(anchors).reshape(-1, 2)
 
     def generate(self):

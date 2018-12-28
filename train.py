@@ -22,6 +22,7 @@ def _main():
     parser.add_option("-n", "--epochs", dest="epochs", help="number of epochs", default=64)
     parser.add_option("-t", "--fine", dest="tune", help="number of epochs to fine tune with all layers unfreezed", default=32)
     parser.add_option("-l", "--no_class", dest="ignore_class_loss", help="ignore classification loss", default=False)
+    parser.add_option("-a", "--anchors_path", dest="anchors_path", help="custom anchors path", default=False)
 
     (options, args) = parser.parse_args()
 
@@ -51,11 +52,16 @@ def _main():
         classes_path = 'model_data/bus_classes.txt'
         annotation_path = 'train.txt'
 
+    if options.anchors_path:
+        anchors_path = options.anchors_path
+    else:
+        anchors_path = 'model_data/yolo_anchors.txt'
+
+    print("anchors path : {}".format(anchors_path))
     print("classes path : {}".format(classes_path))
     print("anns path : {}".format(annotation_path))
 
     log_dir = 'logs/000/'
-    anchors_path = 'model_data/yolo_anchors.txt'
     class_names = get_classes(classes_path)
     num_classes = len(class_names)
     anchors = get_anchors(anchors_path)
