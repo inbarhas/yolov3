@@ -20,7 +20,7 @@ from keras.utils import multi_gpu_model
 
 class YOLO(object):
     _defaults = {
-        "model_path": 'model_data/yolo.h5',
+        "model_path": 'model_data/yolo_weights.h5',
         "anchors_path": 'model_data/yolo_anchors.txt',
         "classes_path": 'model_data/bus_classes.txt',
         "score" : 0.3,
@@ -44,8 +44,11 @@ class YOLO(object):
         self.sess = K.get_session()
         self.boxes, self.scores, self.classes = self.generate()
 
+        print("class path {}, using classes : {}".format(self.classes_path, str(self.class_names)))
+
     def _get_class(self):
         classes_path = os.path.expanduser(self.classes_path)
+        print("classes path : {}".format(classes_path))
         with open(classes_path) as f:
             class_names = f.readlines()
         class_names = [c.strip() for c in class_names]
