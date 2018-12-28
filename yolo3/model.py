@@ -342,7 +342,7 @@ def box_iou(b1, b2):
     return iou
 
 
-def yolo_loss(args, anchors, num_classes, ignore_thresh=.5, print_loss=False, ignore_class_loss = False):
+def yolo_loss(args, anchors, num_classes, ignore_thresh=.5, print_loss=False, loss_deg=1):
     '''Return yolo_loss tensor
 
     Parameters
@@ -407,8 +407,8 @@ def yolo_loss(args, anchors, num_classes, ignore_thresh=.5, print_loss=False, ig
         confidence_loss = K.sum(confidence_loss) / mf
         class_loss = K.sum(class_loss) / mf
 
-        if ignore_class_loss:
-            class_loss = 0*class_loss
+        if loss_deg > 1:
+            class_loss = class_loss / loss_deg
 
         loss += xy_loss + wh_loss + confidence_loss + class_loss
         if print_loss:
