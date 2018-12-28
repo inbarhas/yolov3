@@ -63,6 +63,7 @@ class YOLO(object):
 
     def generate(self):
         model_path = os.path.expanduser(self.model_path)
+        print("model path : {}".format(model_path))
         assert model_path.endswith('.h5'), 'Keras model or weights must be a .h5 file.'
 
         # Load model, or construct model and load weights.
