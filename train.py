@@ -21,6 +21,7 @@ def _main():
     parser.add_option("-f", "--freeze", dest="fr", help="body : body, last : all but last3, None : nothing", default="last")
     parser.add_option("-n", "--epochs", dest="epochs", help="number of epochs", default=64)
     parser.add_option("-t", "--fine", dest="tune", help="number of epochs to fine tune with all layers unfreezed", default=32)
+    parser.add_option("-l", "--no_class", dest="ignore_class_loss", help="number of epochs to fine tune with all layers unfreezed", default=False)
 
     (options, args) = parser.parse_args()
 
@@ -37,6 +38,11 @@ def _main():
     else:
         freeze_body = 0
         fr_last = 'nothing'
+
+    ignore_class_loss = False
+    if options.ignore_class_loss:
+        print("TAMIR MODIFICATION ==== Ignoring class loss!!!")
+        ignore_class_loss = True
 
     if options.single:
         classes_path = 'model_data/bus_classes_single.txt'
@@ -62,7 +68,8 @@ def _main():
             freeze_body=freeze_body, weights_path='model_data/tiny_yolo_weights.h5')
     else:
         model = create_model(input_shape, anchors, num_classes,
-            freeze_body=freeze_body, weights_path='model_data/yolo_weights.h5') # make sure you know what you freeze
+            freeze_body=freeze_body, weights_path='model_data/yolo_weights.h5',
+            ignore_class_loss = ignore_class_loss) # make sure you know what you freeze
 
     logging = TensorBoard(log_dir=log_dir)
     checkpoint = ModelCheckpoint(log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
@@ -139,7 +146,7 @@ def get_anchors(anchors_path):
 
 
 def create_model(input_shape, anchors, num_classes, load_pretrained=True, freeze_body=2,
-            weights_path='model_data/yolo_weights.h5'):
+            weights_path='model_data/yolo_weights.h5', ignore_class_loss=False):
     '''create the training model'''
     K.clear_session() # get a new session
     image_input = Input(shape=(None, None, 3))
@@ -152,6 +159,9 @@ def create_model(input_shape, anchors, num_classes, load_pretrained=True, freeze
     model_body = yolo_body(image_input, num_anchors//3, num_classes)
     print('Create YOLOv3 model with {} anchors and {} classes.'.format(num_anchors, num_classes))
 
+    if ignore_class_loss:
+        print("TAMIR MODIFICATION ====== ignoring classes loss !!! should help focus on regions...")
+
     if load_pretrained:
         model_body.load_weights(weights_path, by_name=True, skip_mismatch=True)
         print('Load weights {}.'.format(weights_path))
@@ -162,7 +172,7 @@ def create_model(input_shape, anchors, num_classes, load_pretrained=True, freeze
             print('Freeze the first {} layers of total {} layers.'.format(num, len(model_body.layers)))
 
     model_loss = Lambda(yolo_loss, output_shape=(1,), name='yolo_loss',
-        arguments={'anchors': anchors, 'num_classes': num_classes, 'ignore_thresh': 0.5})(
+        arguments={'anchors': anchors, 'num_classes': num_classes, 'ignore_thresh': 0.5, 'ignore_class_loss': ignore_class_loss})(
         [*model_body.output, *y_true])
     model = Model([model_body.input, *y_true], model_loss)
 
