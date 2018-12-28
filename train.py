@@ -45,6 +45,9 @@ def _main():
         classes_path = 'model_data/bus_classes.txt'
         annotation_path = 'train.txt'
 
+    print("classes path : {}".format(classes_path))
+    print("anns path : {}".format(annotation_path))
+
     log_dir = 'logs/000/'
     anchors_path = 'model_data/yolo_anchors.txt'
     class_names = get_classes(classes_path)
