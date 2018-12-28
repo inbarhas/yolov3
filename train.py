@@ -1,6 +1,7 @@
 """
 Retrain the YOLO model for your own dataset.
 """
+from optparse import OptionParser
 
 import numpy as np
 import keras.backend as K
@@ -14,9 +15,36 @@ from yolo3.utils import get_random_data
 
 
 def _main():
-    annotation_path = 'train.txt'
+
+    parser = OptionParser()
+    parser.add_option("-a", "--anns", dest="anns", help="Path to input anns file.")
+    parser.add_option("-s", "--single", dest="single", help="override to use single class", default=False)
+    parser.add_option("-f", "--freeze", dest="fr", help="body : body, last : all but last3, None : nothing", default="last")
+    parser.add_option("-n", "--epochs", dest="epochs", help="number of epochs", default=50)
+
+    (options, args) = parser.parse_args()
+
+    n_epochs = int(options.epochs)
+
+    fr_last = options.fr_last.lower()
+    if fr_last == 'last':
+        freeze_body = 2  # freezes all but last 3 layers
+        fr_last = 'all except last 3'
+    elif fr_last == 'body':
+        freeze_body = 1  # freezes darknet 53 body + last
+        fr_last = 'darknet_body freezed'
+    else:
+        freeze_body = 0
+        fr_last = 'nothing'
+
+    if options.single:
+        classes_path = 'model_data/bus_classes_single.txt'
+        annotation_path = 'train_single.txt'
+    else:
+        classes_path = 'model_data/bus_classes.txt'
+        annotation_path = 'train.txt'
+
     log_dir = 'logs/000/'
-    classes_path = 'model_data/voc_classes.txt'
     anchors_path = 'model_data/yolo_anchors.txt'
     class_names = get_classes(classes_path)
     num_classes = len(class_names)
@@ -27,10 +55,10 @@ def _main():
     is_tiny_version = len(anchors)==6 # default setting
     if is_tiny_version:
         model = create_tiny_model(input_shape, anchors, num_classes,
-            freeze_body=2, weights_path='model_data/tiny_yolo_weights.h5')
+            freeze_body=freeze_body, weights_path='model_data/tiny_yolo_weights.h5')
     else:
         model = create_model(input_shape, anchors, num_classes,
-            freeze_body=2, weights_path='model_data/yolo_weights.h5') # make sure you know what you freeze
+            freeze_body=freeze_body, weights_path='model_data/yolo_weights.h5') # make sure you know what you freeze
 
     logging = TensorBoard(log_dir=log_dir)
     checkpoint = ModelCheckpoint(log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
@@ -56,11 +84,12 @@ def _main():
 
         batch_size = 32
         print('Train on {} samples, val on {} samples, with batch size {}.'.format(num_train, num_val, batch_size))
+        print('Initial training - freezed layers : {}'.format(fr_last))
         model.fit_generator(data_generator_wrapper(lines[:num_train], batch_size, input_shape, anchors, num_classes),
                 steps_per_epoch=max(1, num_train//batch_size),
                 validation_data=data_generator_wrapper(lines[num_train:], batch_size, input_shape, anchors, num_classes),
                 validation_steps=max(1, num_val//batch_size),
-                epochs=50,
+                epochs=n_epochs,
                 initial_epoch=0,
                 callbacks=[logging, checkpoint])
         model.save_weights(log_dir + 'trained_weights_stage_1.h5')
@@ -79,8 +108,8 @@ def _main():
             steps_per_epoch=max(1, num_train//batch_size),
             validation_data=data_generator_wrapper(lines[num_train:], batch_size, input_shape, anchors, num_classes),
             validation_steps=max(1, num_val//batch_size),
-            epochs=100,
-            initial_epoch=50,
+            epochs=n_epochs + n_epochs,
+            initial_epoch=n_epochs,
             callbacks=[logging, checkpoint, reduce_lr, early_stopping])
         model.save_weights(log_dir + 'trained_weights_final.h5')
 
