@@ -102,6 +102,7 @@ def _main():
             model.layers[i].trainable = True
         model.compile(optimizer=Adam(lr=1e-4), loss={'yolo_loss': lambda y_true, y_pred: y_pred}) # recompile to apply the change
         print('Unfreeze all of the layers.')
+        print('This stage takes more GPU mem, if it crash try reducing batch size or unfreeze a smaller number of layers')
 
         batch_size = 16 # note that more GPU memory is required after unfreezing the body
         print('Train on {} samples, val on {} samples, with batch size {}.'.format(num_train, num_val, batch_size))
@@ -112,8 +113,10 @@ def _main():
             epochs=n_epochs + n_tune,
             initial_epoch=n_epochs,
             callbacks=[logging, checkpoint, reduce_lr, early_stopping])
+        print("Done fine tune stage, saving weights")
         model.save_weights(log_dir + 'trained_weights_final.h5')
 
+    print("\n====done training====\n")
     # Further training if needed.
 
 
