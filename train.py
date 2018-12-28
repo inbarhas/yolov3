@@ -21,7 +21,7 @@ def _main():
     parser.add_option("-f", "--freeze", dest="fr", help="body : body, last : all but last3, None : nothing", default="last")
     parser.add_option("-n", "--epochs", dest="epochs", help="number of epochs", default=64)
     parser.add_option("-t", "--fine", dest="tune", help="number of epochs to fine tune with all layers unfreezed", default=32)
-    parser.add_option("-l", "--no_class", dest="ignore_class_loss", help="number of epochs to fine tune with all layers unfreezed", default=False)
+    parser.add_option("-l", "--no_class", dest="ignore_class_loss", help="ignore classification loss", default=False)
 
     (options, args) = parser.parse_args()
 
