@@ -17,16 +17,17 @@ from yolo3.utils import get_random_data
 def _main():
 
     parser = OptionParser()
-    parser.add_option("-a", "--anns", dest="anns", help="Path to input anns file.")
     parser.add_option("-s", "--single", dest="single", help="override to use single class", default=False)
     parser.add_option("-f", "--freeze", dest="fr", help="body : body, last : all but last3, None : nothing", default="last")
-    parser.add_option("-n", "--epochs", dest="epochs", help="number of epochs", default=50)
+    parser.add_option("-n", "--epochs", dest="epochs", help="number of epochs", default=64)
+    parser.add_option("-t", "--fine", dest="tune", help="number of epochs to fine tune with all layers unfreezed", default=32)
 
     (options, args) = parser.parse_args()
 
     n_epochs = int(options.epochs)
+    n_tune = int(options.tune)
 
-    fr_last = options.fr_last.lower()
+    fr_last = options.fr.lower()
     if fr_last == 'last':
         freeze_body = 2  # freezes all but last 3 layers
         fr_last = 'all except last 3'
@@ -102,13 +103,13 @@ def _main():
         model.compile(optimizer=Adam(lr=1e-4), loss={'yolo_loss': lambda y_true, y_pred: y_pred}) # recompile to apply the change
         print('Unfreeze all of the layers.')
 
-        batch_size = 32 # note that more GPU memory is required after unfreezing the body
+        batch_size = 16 # note that more GPU memory is required after unfreezing the body
         print('Train on {} samples, val on {} samples, with batch size {}.'.format(num_train, num_val, batch_size))
         model.fit_generator(data_generator_wrapper(lines[:num_train], batch_size, input_shape, anchors, num_classes),
             steps_per_epoch=max(1, num_train//batch_size),
             validation_data=data_generator_wrapper(lines[num_train:], batch_size, input_shape, anchors, num_classes),
             validation_steps=max(1, num_val//batch_size),
-            epochs=n_epochs + n_epochs,
+            epochs=n_epochs + n_tune,
             initial_epoch=n_epochs,
             callbacks=[logging, checkpoint, reduce_lr, early_stopping])
         model.save_weights(log_dir + 'trained_weights_final.h5')
