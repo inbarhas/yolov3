@@ -7,3 +7,5 @@ proj_models/final_single_custom_loss_anchors.h5 filter=lfs diff=lfs merge=lfs -t
 proj_models/final_single_no_loss_custom_anchor_200p50.h5 filter=lfs diff=lfs merge=lfs -text
 proj_models/final_single_mod_LossAnchors_200p50.h5 filter=lfs diff=lfs merge=lfs -text
 proj_models/final_cust_loss4_anchs.h5 filter=lfs diff=lfs merge=lfs -text
+proj_models/final_single_custm_4loss_anchs.h5 filter=lfs diff=lfs merge=lfs -text
+proj_models/final_single_custm_2loss_anchs.h5 filter=lfs diff=lfs merge=lfs -text
