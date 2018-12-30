@@ -6,12 +6,11 @@ import os
 from matplotlib import pyplot
 import numpy as np
 from sklearn.externals import joblib
-from classification_train import svm_predict_class
 from keras.applications.vgg16 import VGG16
 from keras.applications.vgg16 import preprocess_input
 from keras.optimizers import SGD
 from keras.models import Model
-
+from classification_train import svm_predict_class
 
 def load_vgg():
     vgg = VGG16(weights='imagenet', include_top=False, input_shape=(224,224,3))
@@ -32,13 +31,13 @@ def detect_img(yolo, path, cls=None, cls_type='svm'):
     for imgname in os.listdir(path):
         if imgname.lower().endswith('.jpg') or imgname.lower().endswith('.jpeg'):
             print('Input image filename:{}'.format(imgname))
-            image, boxes, scores = Image.open(os.path.join(path, imgname))
-            r_image = yolo.detect_image(image)
+            image = Image.open(os.path.join(path, imgname))
+            r_image, boxes, scores = yolo.detect_image(image)
 
             # Classify this bounding box
             if cls:
                 # boxes is a list of [top, left, bottom, right] i.e [y1, x1, y2, x2]
-                y = svm_predict_class(image, boxes, cls, cls_type)
+                y = svm_predict_class(image, boxes, cls)
                 print('y = {}'.format(y))
 
             pyplot.figure()
@@ -85,7 +84,7 @@ if __name__ == '__main__':
     if FLAGS.post_cls == 'svm':
         cls_type = 'svm'
         print("loading classifier : svm")
-        cls = joblib.load('svm.dump')
+        cls = joblib.load('model_data/svm.dump')
         net = load_vgg()
         classificator['svm'] = cls
         classificator['net'] = net

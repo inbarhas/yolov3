@@ -350,6 +350,9 @@ def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
 
 
 def svm_predict_class(pil_image, boxes, classifier):
+    if (len(boxes) == 0):
+        return []
+
     svm = classifier['svm']
     vgg_features = classifier['net']
     x = []
@@ -359,7 +362,7 @@ def svm_predict_class(pil_image, boxes, classifier):
         cropped = pil_image.copy()
         # crop : left, upper, right, lower
         cropped = cropped.crop((x1, y1, x2, y2))
-        cropped = cropped.resize(network_input_shape['vgg'])
+        cropped = cropped.resize((224,224))
         cropped = image.img_to_array(cropped)
         features = vgg_extract_features_img_array(cropped, vgg_features)
         x.append(features)
