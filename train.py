@@ -138,7 +138,7 @@ def _main():
     print("\n====done training YOLOv3 model====\n")
 
     print("\n==== Training SVM for classification ====\n")
-    with open(annotation_path) as f:
+    with open(annotations_multi_path) as f:
         lines_multi = f.readlines()
     np.random.seed(10101)
     np.random.shuffle(lines_multi)
