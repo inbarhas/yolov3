@@ -188,6 +188,14 @@ def vgg16_get_model(num_classes):
 # End
 
 
+def vgg_extract_features_img_array(img_array, model):
+    x = np.expand_dims(img_array, axis=0)
+    x = preprocess_input(x)
+    features = model.predict(x)
+    return features
+# End
+
+
 def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
     # prepare data
     lines = np.array(lines)
@@ -255,12 +263,6 @@ def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
     print("==== training SVM")
     print("==========================================")
 
-    def vgg_extract_features_img_array(img_array, model):
-        x = np.expand_dims(img_array, axis=0)
-        x = preprocess_input(x)
-        features = model.predict(x)
-        return features
-
     # define input data generators
     shift = 0.1
     datagen_train = ImageDataGenerator(rotation_range=30, width_shift_range=shift, height_shift_range=shift,
@@ -304,7 +306,7 @@ def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
     # request probability estimation
     svm = SVC(probability=True)
     # 10-fold cross validation, use 4 thread as each fold and each parameter set can be train in parallel
-    clf = GridSearchCV(svm, param, cv=4, n_jobs=1, verbose=3)
+    clf = GridSearchCV(svm, param, cv=4, n_jobs=4, verbose=3)
     # import ipdb; ipdb.set_trace()
     clf.fit(svm_x_data, svm_y_data)
     print("\nBest parameters set:")
@@ -346,6 +348,26 @@ def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
     print("End of SVM training")
 # End
 
+
+def svm_predict_class(pil_image, boxes, classifier):
+    svm = classifier['svm']
+    vgg_features = classifier['net']
+    x = []
+    for box in boxes:
+        # boxes is a list of [top, left, bottom, right] i.e [y1, x1, y2, x2]
+        y1, x1, y2, x2 = box  # TODO
+        cropped = pil_image.copy()
+        # crop : left, upper, right, lower
+        cropped = cropped.crop((x1, y1, x2, y2))
+        cropped = cropped.resize(network_input_shape['vgg'])
+        cropped = image.img_to_array(cropped)
+        features = vgg_extract_features_img_array(cropped, vgg_features)
+        x.append(features)
+
+    x = np.reshape(x, (len(boxes), -1))
+    y = svm.predict(x)
+    return y
+# End
 
 def main():
     print('unit testing')
