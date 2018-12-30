@@ -13,6 +13,7 @@ from keras.callbacks import TensorBoard, ModelCheckpoint, ReduceLROnPlateau, Ear
 from yolo3.model import preprocess_true_boxes, yolo_body, tiny_yolo_body, yolo_loss
 from yolo3.utils import get_random_data
 
+from classification_train import train_post_classifier
 
 def _main():
 
@@ -50,6 +51,8 @@ def _main():
     else:
         classes_path = 'model_data/bus_classes.txt'
         annotation_path = 'train.txt'
+
+    annotations_multi_path = 'train.txt'
 
     if options.anchors_path:
         anchors_path = options.anchors_path
@@ -131,9 +134,22 @@ def _main():
         print("Done fine tune stage, saving weights")
         model.save_weights(log_dir + 'trained_weights_final.h5')
 
-    print("\n====done training====\n")
     # Further training if needed.
+    print("\n====done training YOLOv3 model====\n")
 
+    print("\n==== Training SVM for classification ====\n")
+    with open(annotation_path) as f:
+        lines_multi = f.readlines()
+    np.random.seed(10101)
+    np.random.shuffle(lines_multi)
+    np.random.seed(None)
+
+    idxs_train = [i for i in range(num_train)]
+    idxs_val = [i for i in range(num_train, len(lines))]
+    train_post_classifier(lines_multi, idxs_train, idxs_val, type='vgg16')
+    print("Done training SVM")
+
+    print("DONE TRAINING - END OF FILE")
 
 def get_classes(classes_path):
     '''loads the classes'''

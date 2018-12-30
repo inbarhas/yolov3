@@ -15,6 +15,7 @@ import os.path
 from sklearn.svm import SVC
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
 from sklearn.metrics import confusion_matrix, classification_report
+from sklearn.externals import joblib
 
 classes_list = []
 
@@ -189,26 +190,20 @@ def vgg16_get_model(num_classes):
 
 def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
     # prepare data
+    lines = np.array(lines)
     train_data, y = process_lines(lines[idxs_train], type)
     val_data, vy = process_lines(lines[idxs_val], type)
-
-    # prepare model
-    num_train = len(idxs_train)
-    num_val = len(idxs_val)
     num_classes = len(classes_list)
-    top_epochs = 50
-
     print("num classes {}".format(num_classes))
-    train_y = to_categorical(y, num_classes)
-    val_y = to_categorical(vy, num_classes)
 
-    # Get model
+    # Get models
+    vgg_net, vgg_features = vgg16_get_model(num_classes)
     if type == 'vgg16':
-        net, vgg_features = vgg16_get_model(num_classes)
+        net = vgg_net
     elif type == 'mobilenet2':
         net = mobilenet2_get_model(num_classes)
     else:
-        print("only vgg16 for now")
+        print("unknown network")
         assert 0
 
     # Compile
@@ -219,13 +214,18 @@ def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
         sgd = SGD(lr=0.001, momentum=0.9, nesterov=True)
         net.compile(optimizer=sgd, loss='categorical_crossentropy', metrics=['acc'])
     else:
-        print("only vgg16 for now")
+        print("unknown network")
         assert 0
 
     """
     print("==============================================")
     print("===== Training CNNs")
     print("==============================================")
+    top_epochs = 50
+    num_train = len(idxs_train)
+    num_val = len(idxs_val)
+    train_y = to_categorical(y, num_classes)
+    val_y = to_categorical(vy, num_classes)
     # define input data generators
     shift = 0.1
     datagen_train = ImageDataGenerator(rotation_range=30, width_shift_range=shift, height_shift_range=shift,
@@ -249,7 +249,7 @@ def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
                       validation_steps=steps_per_epoch_val)
     net.save_weights('post_vgg16.h5')
     print("============================= DONE CNN")
-  """
+    """
 
     print("==========================================")
     print("==== training SVM")
@@ -274,6 +274,7 @@ def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
     datagen_test.fit(val_data)
 
     samples_train = 50 * len(train_data)
+    print("Generating {} testing examples, using data aug".format(samples_train))
     svm_x_data = []
     svm_y_data = []
     cnt = 0
@@ -287,17 +288,12 @@ def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
     svm_x_data = np.array(svm_x_data)
     svm_y_data = np.array(svm_y_data)
     svm_x_data = np.reshape(svm_x_data, (len(svm_x_data), -1))
-    #    svm_y_data = np.reshape(svm_y_data, (len(svm_y_data), -1))
 
     param = [
         {
             "kernel": ["linear"],
-            "C": [1, 10, 100]
+            "C": [1]
         },
-#        {
-#            "kernel": ["linear"],
-#            "C": [1, 10, 100, 1000]
-#        },
         #        {
         #            "kernel": ["rbf"],
         #            "C": [1, 10, 100, 1000],
@@ -308,10 +304,7 @@ def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
     # request probability estimation
     svm = SVC(probability=True)
     # 10-fold cross validation, use 4 thread as each fold and each parameter set can be train in parallel
-    #clf = GridSearchCV(svm, param, cv=10, n_jobs=1, verbose=3)
-    # 4-fold cv
     clf = GridSearchCV(svm, param, cv=4, n_jobs=1, verbose=3)
-
     # import ipdb; ipdb.set_trace()
     clf.fit(svm_x_data, svm_y_data)
     print("\nBest parameters set:")
@@ -320,6 +313,7 @@ def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
 
     print("Run on test set :")
     samples_val = 20 * len(train_data)
+    print("Generating {} testing examples, using data aug".format(samples_val))
     val_svm_x_data = []
     val_svm_y_data = []
     cnt = 0
@@ -334,18 +328,22 @@ def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
     val_svm_y_data = np.array(val_svm_y_data)
 
     val_svm_x_data = np.reshape(val_svm_x_data, (len(val_svm_x_data), -1))
-    #    val_svm_y_data = np.reshape(val_svm_y_data, (len(val_svm_y_data), -1))
-
     y_predict = clf.predict(val_svm_x_data)
-    labels = sorted(list(set(svm_y_data)))
+
+    print("y predicted")
+    print(y_predict)
+    print("val svm y data")
+    print(val_svm_y_data)
     print("\nConfusion matrix:")
-    print("Labels: {0}\n".format(",".join(labels)))
-    print(confusion_matrix(svm_y_data, y_predict, labels=labels))
-
+    print(confusion_matrix(val_svm_y_data, y_predict))
     print("\nClassification report:")
-    print(classification_report(svm_y_data, y_predict))
+    print(classification_report(val_svm_y_data, y_predict))
 
-
+    out_cls_path = '/home/tamirmal/workspace/git/yolov3/model_data/svm.dump'
+    print("Saving SVM to {}".format(out_cls_path))
+    joblib.dump(clf, out_cls_path)
+    print("done saving SVM")
+    print("End of SVM training")
 # End
 
 
