@@ -212,6 +212,101 @@ def train_svm(num_classes, dataset):
 # End
 
 
+###############################################
+#### Mobilenet
+###############################################
+from keras.applications import mobilenet
+from keras.optimizers import Adam
+def mobilenet1_get_model(num_classes):
+    base_model = mobilenet.MobileNet(include_top=False, weights='imagenet',
+                                     input_shape=(224, 224, 3))
+    print("base")
+    base_model.summary()
+
+    x = Sequential()
+    x.add(base_model)
+    x.add(GlobalAveragePooling2D())
+    x.add(Dropout(0.5))
+    x.add(Dense(512))
+    x.add(Dropout(0.5))
+    x.add(Dense(num_classes, activation='sigmoid'))
+    print("my additions")
+    x.summary()
+    return x
+# End
+
+
+from keras.models import Sequential
+from keras.callbacks import ModelCheckpoint, LearningRateScheduler, EarlyStopping, ReduceLROnPlateau
+def train_mobilenet1(dataset, num_classes):
+    train_data, y, val_data, vy = dataset
+
+    train_y = to_categorical(y, num_classes)
+    val_y = to_categorical(vy, num_classes)
+    model = mobilenet1_get_model(num_classes)
+
+    # define input data generators
+    shift = 0.1
+    datagen_train = ImageDataGenerator(rotation_range=30, width_shift_range=shift, height_shift_range=shift,
+                                       horizontal_flip=True, zoom_range=0.2)
+    datagen_train.fit(train_data)
+
+    # For validation, do not rotate. do less augmentation
+    shift = 0.05
+    datagen_test = ImageDataGenerator(width_shift_range=shift, height_shift_range=shift,
+                                      horizontal_flip=True, zoom_range=0.1)
+    datagen_test.fit(val_data)
+
+    epochs = 100
+    batch_size = 32
+    steps_per_epoch = int(len(train_data) / batch_size)
+    steps_per_epoch_val = int(len(val_data) / batch_size)
+
+    print("len data {}, len val {}".format(len(train_data), len(val_data)))
+    print("steps per epoch : {}, val : {}".format(steps_per_epoch, steps_per_epoch_val))
+
+    print("Freezing everything except last 5 layers")
+    for layer in model.layers[:-5]:
+        layer.trainable = False
+
+    model.compile(optimizer=Adam(lr=1e-4), loss='categorical_crossentropy',
+                  metrics=['accuracy', 'mae'])
+    model.summary()
+    model.fit_generator(datagen_train.flow(train_data, train_y, batch_size=batch_size),
+                        steps_per_epoch=steps_per_epoch, epochs=epochs, initial_epoch=0,
+                        validation_data=datagen_test.flow(val_data, val_y, batch_size=batch_size),
+                        validation_steps=steps_per_epoch_val)
+
+    print("unfreeze all model ...")
+    log_dir = 'mobilenet_logs/'
+    checkpoint = ModelCheckpoint(log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
+                                 monitor='val_loss', save_weights_only=True, save_best_only=True, period=3)
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1)
+    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1)
+
+    for layer in model.layers:
+        layer.trainable = True
+
+    model.compile(optimizer=Adam(lr=1e-4), loss='categorical_crossentropy',
+                  metrics=['accuracy', 'mae'])
+    model.summary()
+    model.fit_generator(datagen_train.flow(train_data, train_y, batch_size=batch_size),
+                        steps_per_epoch=steps_per_epoch, epochs=2 * epochs, initial_epoch=epochs,
+                        validation_data=datagen_test.flow(val_data, val_y, batch_size=batch_size),
+                        validation_steps=steps_per_epoch_val,
+                        callbacks=[checkpoint, reduce_lr, early_stopping])
+    model.save_weights(log_dir + 'mobilenet_trained_weights_final.h5')
+
+# End
+
+
+def prep_mobilenet(img_array):
+    processed_image_mobilenet = mobilenet.preprocess_input(img_array.copy())
+    return processed_image_mobilenet
+
+################################################
+################################################
+
 def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
     # prepare data
     lines = np.array(lines)
@@ -220,8 +315,8 @@ def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
     num_classes = len(classes_list)
     print("num classes {}".format(num_classes))
 
-    train_svm(num_classes, [train_data, y, val_data, vy])
-
+#    train_svm(num_classes, [train_data, y, val_data, vy])
+    train_mobilenet1([train_data, y, val_data, vy], num_classes)
 
 def svm_predict_class(pil_image, boxes, classifier):
     if (len(boxes) == 0):
@@ -249,16 +344,24 @@ def svm_predict_class(pil_image, boxes, classifier):
 
 def main():
     print('unit testing')
-    annotation_path = '/home/tamir/PycharmProjects/tau_proj_prep/OUT_yolo_train_zero_based.txt'
-    with open(annotation_path) as f:
-        lines = f.readlines()
+    train_anns = '/home/tamirmal/workspace/git/tau_proj_prep/OUT_yolo_train_zero_based.txt'
+    with open(train_anns) as f:
+        train_lines = f.readlines()
+        print("train len {}".format(len(train_lines)))
 
-    val_split = 0.1
-    val_idx = int(val_split * len(lines))
+    test_anns = '/home/tamirmal/workspace/git/tau_proj_prep/OUT_yolo_test_zero_based.txt'
+    with open(test_anns) as f:
+        test_lines = f.readlines()
+        print("test len {}".format(len(test_lines)))
 
-    idxs_train = [i for i in range(val_idx)]
-    idxs_val = [i for i in range(val_idx, len(lines))]
-    train_post_classifier(lines, idxs_train, idxs_val, type='vgg16')
+    lines = list((*train_lines, *test_lines))
+    print("lines shape {}".format(len(lines)))
+
+    train_idx = len(train_lines)
+    idxs_train = [i for i in range(train_idx)]
+    idxs_val = [i for i in range(train_idx, len(lines))]
+
+    train_post_classifier(lines, idxs_train, idxs_val)
 
 
 if __name__ == "__main__":
