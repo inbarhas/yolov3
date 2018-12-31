@@ -105,7 +105,7 @@ class YOLO(object):
                 score_threshold=self.score, iou_threshold=self.iou)
         return boxes, scores, classes
 
-    def detect_image(self, image):
+    def detect_image(self, image, classification_cb=None, classification_cb_args=None):
         start = timer()
 
         if self.model_image_size != (None, None):
@@ -132,12 +132,25 @@ class YOLO(object):
 
         print('Found {} boxes for {}'.format(len(out_boxes), 'img'))
 
+        ################## TAMIR Classification CB ####################
+        my_classes = ['N/A' for i in range(len(out_boxes))]
+        if classification_cb is not None:
+            assert classification_cb_args is not None
+            my_classes = classification_cb(classification_cb_args)
+        ################################################################
+
         font = ImageFont.truetype(font='font/FiraMono-Medium.otf',
                     size=np.floor(3e-2 * image.size[1] + 0.5).astype('int32'))
         thickness = (image.size[0] + image.size[1]) // 300
 
         for i, c in reversed(list(enumerate(out_classes))):
-            predicted_class = self.class_names[c]
+            ########## TAMIR CLASSIFICATION CB HOOK ################
+            if classification_cb:
+                predicted_class = my_classes[i]
+            else:
+                predicted_class = self.class_names[c]
+            #########################################################
+
             box = out_boxes[i]
             score = out_scores[i]
 

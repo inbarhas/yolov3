@@ -1,17 +1,10 @@
-from keras.preprocessing import image
 import numpy as np
-import os
-from keras.preprocessing.image import ImageDataGenerator
 import PIL
 from keras.preprocessing import image
 from keras.models import Model
 from keras.layers import Dense, GlobalAveragePooling2D, Dropout, Flatten, BatchNormalization
 from keras.preprocessing.image import ImageDataGenerator
 from keras.utils import to_categorical
-from keras import backend as K
-from keras.callbacks import ModelCheckpoint
-from keras.callbacks import TensorBoard
-import os.path
 from sklearn.svm import SVC
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
 from sklearn.metrics import confusion_matrix, classification_report
@@ -318,13 +311,15 @@ def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
 #    train_svm(num_classes, [train_data, y, val_data, vy])
     train_mobilenet1([train_data, y, val_data, vy], num_classes)
 
-def svm_predict_class(pil_image, boxes, classifier):
+def predict_class(pil_image, boxes, classifier):
     if (len(boxes) == 0):
         return []
 
     svm = classifier['svm']
     vgg_features = classifier['net']
+    my_mobilenet = classifier['mobilenet']
     x = []
+    x_mobilent = []
     for box in boxes:
         # boxes is a list of [top, left, bottom, right] i.e [y1, x1, y2, x2]
         y1, x1, y2, x2 = box  # TODO
@@ -333,11 +328,16 @@ def svm_predict_class(pil_image, boxes, classifier):
         cropped = cropped.crop((x1, y1, x2, y2))
         cropped = cropped.resize((224,224))
         cropped = image.img_to_array(cropped)
+        x_mobilent.append(cropped)
         features = vgg_extract_features_img_array(cropped, vgg_features)
         x.append(features)
 
     x = np.reshape(x, (len(boxes), -1))
+    x_mobilent = np.reshape(x, (len(boxes), -1))
+    x_mobilent = mobilenet.preprocess_input(x_mobilent)
+
     y = svm.predict(x)
+    y_mobilenet = my_mobilenet.predict(x_mobilent)
     return y
 # End
 
