@@ -21,7 +21,7 @@ classes_list = []
 
 network_input_shape = {
     'vgg16': (224, 224),
-    'mobilenet2': (224, 224)
+    'mobilenet': (224, 224)
 }
 
 
@@ -84,83 +84,6 @@ def process_lines(lines, type):
     return data, y
 # End
 
-"""
-from keras.applications.inception_v3 import InceptionV3
-def inception_v3_get_model(num_classes):
-    base_model = InceptionV3(weights='imagenet', include_top=False)
-    img_width, img_height = 299, 299  # Inception image size
-    top_layers_checkpoint_path = 'cp.top.best.hdf5'
-    fine_tuned_checkpoint_path = 'cp.fine_tuned.best.hdf5'
-    new_extended_inception_weights = 'final_weights.hdf5'
-
-    # add a global spatial average pooling layer
-    x = base_model.output
-    x = GlobalAveragePooling2D()(x)
-    # let's add a fully-connected layer
-    x = Dense(1024, activation='relu')(x)
-    # and a logistic layer -- we have 2 classes
-    predictions = Dense(num_classes, activation='softmax')(x)
-
-    # this is the model we will train
-    model = Model(input=base_model.input, output=predictions)
-
-    assert 0  # TODO
-"""
-
-"""
-from keras.applications import MobileNet
-def mobilenet_get_model(num_classes):
-    base_model = MobileNet(weights='imagenet', include_top=False)  # imports the mobilenet model and discards the last 1000 neuron layer.
-    x = base_model.output
-    x = GlobalAveragePooling2D()(x)
-    x = Dense(1024, activation='relu')(x)  # we add dense layers so that the model can learn more complex functions and classify for better results.
-    x = Dense(1024, activation='relu')(x)  # dense layer 2
-    x = Dense(512, activation='relu')(x)  # dense layer 3
-    preds = Dense(num_classes, activation='softmax')(x)  # final layer with softmax activation
-    model = Model(inputs=base_model.input, outputs=preds)
-
-    # freeze all layers
-    for layer in model.layers:
-        layer.trainable = False
-    # or if we want to set the first 20 layers of the network to be non-trainable, rest are trainable
-    for layer in model.layers[20:]:
-        layer.trainable = True
-
-    print("Print model layers")
-    for i, layer in enumerate(model.layers):
-        print(i, layer.name)
-
-    # compile the model
-    model.compile(optimizer='Adam', loss='categorical_crossentropy', metrics=['accuracy'])
-
-    return model
-
-# End
-"""
-
-from keras.applications import MobileNetV2
-def mobilenet2_get_model(num_classes):
-    base_model = MobileNetV2(weights='imagenet', include_top=False, input_shape=(224,224,3))
-    # freeze all layers
-    for layer in base_model.layers:
-        layer.trainable = False
-
-    base_model.summary()
-
-    x = base_model.output
-    x = Flatten()(x)
-    x = Dense(1024, activation='relu', name='fc1')(x)
-    x = BatchNormalization()(x)
-    x = Dropout(0.5)(x)
-    predictions = Dense(num_classes, activation='softmax', name='output')(x)
-
-    model = Model(inputs=base_model.input, outputs=predictions)
-
-    return model
-
-# End
-
-
 from keras.applications.vgg16 import VGG16
 from keras.applications.vgg16 import preprocess_input
 from keras.optimizers import SGD
@@ -196,68 +119,13 @@ def vgg_extract_features_img_array(img_array, model):
 # End
 
 
-def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
-    # prepare data
-    lines = np.array(lines)
-    train_data, y = process_lines(lines[idxs_train], type)
-    val_data, vy = process_lines(lines[idxs_val], type)
-    num_classes = len(classes_list)
-    print("num classes {}".format(num_classes))
-
+def train_svm(num_classes, dataset):
+    train_data, y, val_data, vy = dataset
     # Get models
-    vgg_net, vgg_features = vgg16_get_model(num_classes)
-    if type == 'vgg16':
-        net = vgg_net
-    elif type == 'mobilenet2':
-        net = mobilenet2_get_model(num_classes)
-    else:
-        print("unknown network")
-        assert 0
-
+    net, vgg_features = vgg16_get_model(num_classes)
     # Compile
-    if type == 'vgg16':
-        sgd = SGD(lr=1e-4, decay=1e-6, momentum=0.9, nesterov=True)
-        net.compile(optimizer=sgd, loss='categorical_crossentropy', metrics=['accuracy'])
-    elif type == 'mobilenet2':
-        sgd = SGD(lr=0.001, momentum=0.9, nesterov=True)
-        net.compile(optimizer=sgd, loss='categorical_crossentropy', metrics=['acc'])
-    else:
-        print("unknown network")
-        assert 0
-
-    """
-    print("==============================================")
-    print("===== Training CNNs")
-    print("==============================================")
-    top_epochs = 50
-    num_train = len(idxs_train)
-    num_val = len(idxs_val)
-    train_y = to_categorical(y, num_classes)
-    val_y = to_categorical(vy, num_classes)
-    # define input data generators
-    shift = 0.1
-    datagen_train = ImageDataGenerator(rotation_range=30, width_shift_range=shift, height_shift_range=shift,
-                                       horizontal_flip=True, zoom_range=0.2)
-    datagen_train.fit(train_data)
-
-    # For validation, do not rotate. do less augmentation
-    shift = 0.05
-    datagen_test = ImageDataGenerator(width_shift_range=shift, height_shift_range=shift,
-                                       horizontal_flip=True, zoom_range=0.1)
-    datagen_test.fit(val_data)
-
-    print("==== Starting training - all layers but last are freezed ====")
-    batch_size = 32
-    epochs = 50
-    steps_per_epoch = num_train/batch_size
-    steps_per_epoch_val = num_val/batch_size
-    net.fit_generator(datagen_train.flow(train_data, train_y, batch_size=batch_size),
-                      steps_per_epoch=steps_per_epoch, epochs=epochs,
-                      validation_data=datagen_test.flow(val_data, val_y, batch_size=batch_size),
-                      validation_steps=steps_per_epoch_val)
-    net.save_weights('post_vgg16.h5')
-    print("============================= DONE CNN")
-    """
+    sgd = SGD(lr=1e-4, decay=1e-6, momentum=0.9, nesterov=True)
+    net.compile(optimizer=sgd, loss='categorical_crossentropy', metrics=['accuracy'])
 
     print("==========================================")
     print("==== training SVM")
@@ -296,11 +164,6 @@ def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
             "kernel": ["linear"],
             "C": [1]
         },
-        #        {
-        #            "kernel": ["rbf"],
-        #            "C": [1, 10, 100, 1000],
-        #            "gamma": [1e-2, 1e-3, 1e-4, 1e-5]
-        #        }
     ]
 
     # request probability estimation
@@ -341,12 +204,23 @@ def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
     print("\nClassification report:")
     print(classification_report(val_svm_y_data, y_predict))
 
-    out_cls_path = '/home/tamirmal/workspace/git/yolov3/model_data/svm.dump'
+    out_cls_path = 'svm.dump'
     print("Saving SVM to {}".format(out_cls_path))
     joblib.dump(clf, out_cls_path)
     print("done saving SVM")
     print("End of SVM training")
 # End
+
+
+def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
+    # prepare data
+    lines = np.array(lines)
+    train_data, y = process_lines(lines[idxs_train], type)
+    val_data, vy = process_lines(lines[idxs_val], type)
+    num_classes = len(classes_list)
+    print("num classes {}".format(num_classes))
+
+    train_svm(num_classes, [train_data, y, val_data, vy])
 
 
 def svm_predict_class(pil_image, boxes, classifier):
@@ -372,19 +246,19 @@ def svm_predict_class(pil_image, boxes, classifier):
     return y
 # End
 
+
 def main():
     print('unit testing')
-    annotation_path = 'unit_test.txt'
+    annotation_path = '/home/tamir/PycharmProjects/tau_proj_prep/OUT_yolo_train_zero_based.txt'
     with open(annotation_path) as f:
         lines = f.readlines()
-        lines = np.array(lines)
 
     val_split = 0.1
     val_idx = int(val_split * len(lines))
 
     idxs_train = [i for i in range(val_idx)]
     idxs_val = [i for i in range(val_idx, len(lines))]
-    train_post_classifier(lines, idxs_train, idxs_val, type='mobilenet2')
+    train_post_classifier(lines, idxs_train, idxs_val, type='vgg16')
 
 
 if __name__ == "__main__":
