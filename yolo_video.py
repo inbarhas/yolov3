@@ -10,21 +10,7 @@ from keras.applications.vgg16 import VGG16
 from keras.applications.vgg16 import preprocess_input
 from keras.optimizers import SGD
 from keras.models import Model
-from classification_train import predict_class, mobilenet1_get_model
-
-def load_vgg():
-    vgg = VGG16(weights='imagenet', include_top=False, input_shape=(224,224,3))
-    # freeze all layers
-    for layer in vgg.layers:
-        layer.trainable = False
-
-    vgg.summary()
-
-    print("Using base VGG as feature extractor")
-    vgg_features = Model(inputs=vgg.input, outputs=vgg.output)
-    sgd = SGD(lr=1e-4, decay=1e-6, momentum=0.9, nesterov=True)
-    vgg_features.compile(optimizer=sgd, loss='categorical_crossentropy', metrics=['accuracy'])
-    return vgg_features
+from classification_train import predict_class, mobilenet1_get_model, vgg16_get_model
 
 
 def detect_img(yolo, path, cls=None, cls_type='svm'):
@@ -83,12 +69,16 @@ if __name__ == '__main__':
     cls_type = 'svm'
     print("loading classifier : svm / vgg")
     cls = joblib.load('model_data/svm.dump')
-    net = load_vgg()
+    vgg_classifier, vgg_feature_extractor = vgg16_get_model(num_classes=4)
+    print("loading vgg weights")
+    vgg_classifier.load_weights('model_data/vgg_full_trained_weights_final.h5')
     print("loading classifier : mobilenet")
     mobilenet = mobilenet1_get_model(num_classes=4) # TODO change this one moving to final dataset
     mobilenet.load_weights('model_data/mobilenet_final_weights.h5')
+
     classificator['svm'] = cls
-    classificator['net'] = net
+    classificator['vgg_features'] = vgg_feature_extractor
+    classificator['vgg_classifier'] = vgg_classifier
     classificator['mobilenet'] = mobilenet
 
     """

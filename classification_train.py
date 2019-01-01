@@ -397,6 +397,7 @@ def train_post_classifier(lines, idxs_train, idxs_val):
 
     vgg_classifier, vgg_features = vgg16_get_model(num_classes)
     train_vgg(vgg_classifier, [train_data, cat_y, val_data, cat_vy])
+    ## TODO important, SVM used the trained VGG as feature-extractor ! not original with imagenet
     train_svm(vgg_features, [train_data, y, val_data, vy])
 
 
@@ -405,7 +406,7 @@ def predict_class(pil_image, boxes, classifier):
         return []
 
     svm = classifier['svm']
-    vgg_features = classifier['net']
+    vgg_features = classifier['vgg_features']
     my_mobilenet = classifier['mobilenet']
     vgg_classifier = classifier['vgg_classifier']
 
