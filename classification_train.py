@@ -9,6 +9,14 @@ from sklearn.svm import SVC
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
 from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.externals import joblib
+from keras.applications.vgg16 import VGG16
+from keras.applications.vgg16 import preprocess_input
+from keras.optimizers import SGD
+from keras.applications import mobilenet
+from keras.optimizers import Adam
+from keras.models import Sequential
+from keras.callbacks import ModelCheckpoint, LearningRateScheduler, EarlyStopping, ReduceLROnPlateau
+
 
 classes_list = []
 
@@ -77,48 +85,128 @@ def process_lines(lines, type):
     return data, y
 # End
 
-from keras.applications.vgg16 import VGG16
-from keras.applications.vgg16 import preprocess_input
-from keras.optimizers import SGD
+########################################
+#### VGG16
+########################################
+
+# Returns 2 models : One to be used as a feature extractor. One for classification
 def vgg16_get_model(num_classes):
-    vgg = VGG16(weights='imagenet', include_top=False, input_shape=(224,224,3))
+    base_model = VGG16(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
     # freeze all layers
-    for layer in vgg.layers:
+    for layer in base_model.layers:
         layer.trainable = False
 
-    vgg.summary()
+    print("Base model VGG summary:")
+    base_model.summary()
 
     print("Using base VGG as feature extractor")
-    vgg_features = Model(inputs=vgg.input, outputs=vgg.output)
+    vgg_features = Model(inputs=base_model.input, outputs=base_model.output)
 
-    x = vgg.output
-    x = GlobalAveragePooling2D()(x)
-    x = Dense(128, activation='relu')(x)
-    x = Dropout(0.5)(x)
-    x = Dense(num_classes, activation='softmax', name='predictions')(x)
+    x = Sequential()
+    x.add(base_model)
+    x.add(GlobalAveragePooling2D())
+    x.add(Dense(128, activation='relu'))
+    x.add(Dropout(0.5))
+    x.add(Dense(num_classes, activation='softmax', name='predictions'))
+    print("vgg - with my TOP layers")
+    x.summary()
 
-    my_model = Model(inputs=vgg.input, outputs=x)
-    my_model.summary()
-
-    return my_model, vgg_features
+    return x, vgg_features
 # End
 
-
-def vgg_extract_features_img_array(img_array, model):
+def vgg_extract_features_and_prep(img_array, model):
     x = np.expand_dims(img_array, axis=0)
     x = preprocess_input(x)
     features = model.predict(x)
+    return features, x
+
+def vgg_extract_features_img_array(img_array, model):
+    features, _ = vgg_extract_features_and_prep(img_array, model)
     return features
 # End
 
 
-def train_svm(num_classes, dataset):
+def train_vgg(model, dataset):
+    train_data, train_y, val_data, val_y = dataset
+
+    print("len of train = {}".format(len(train_data)))
+    print("len of val = {}".format(len(val_data)))
+
+    # define input data generators
+    shift = 0.1
+    datagen_train = ImageDataGenerator(rotation_range=30, width_shift_range=shift, height_shift_range=shift,
+                                       horizontal_flip=True, zoom_range=0.2)
+    datagen_train.fit(train_data)
+
+    # For validation, do not rotate. do less augmentation
+    shift = 0.05
+    datagen_test = ImageDataGenerator(width_shift_range=shift, height_shift_range=shift,
+                                      horizontal_flip=True, zoom_range=0.1)
+    datagen_test.fit(val_data)
+
+    epochs = 100
+    batch_size = 32
+    steps_per_epoch = int(len(train_data) / batch_size)
+    steps_per_epoch_val = int(len(val_data) / batch_size)
+
+    print("len data {}, len val {}".format(len(train_data), len(val_data)))
+    print("steps per epoch : {}, val : {}".format(steps_per_epoch, steps_per_epoch_val))
+
+    print("Freezing everything except last 5 layers")
+    for layer in model.layers[:-5]:
+        layer.trainable = False
+
+    model.compile(optimizer=Adam(lr=1e-4), loss='categorical_crossentropy',
+                  metrics=['accuracy', 'mae'])
+    model.summary()
+    model.fit_generator(datagen_train.flow(train_data, train_y, batch_size=batch_size),
+                        steps_per_epoch=steps_per_epoch, epochs=epochs, initial_epoch=0,
+                        validation_data=datagen_test.flow(val_data, val_y, batch_size=batch_size),
+                        validation_steps=steps_per_epoch_val)
+
+    print("unfreeze all model ...")
+    log_dir = 'vgg_logs/'
+    checkpoint = ModelCheckpoint(log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
+                                 monitor='val_loss', save_weights_only=True, save_best_only=True, period=3)
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1, cooldown=3)
+    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1)
+
+    for layer in model.layers:
+        layer.trainable = True
+
+    model.compile(optimizer=Adam(lr=1e-4), loss='categorical_crossentropy',
+                  metrics=['accuracy', 'mae'])
+    model.summary()
+    model.fit_generator(datagen_train.flow(train_data, train_y, batch_size=batch_size),
+                        steps_per_epoch=steps_per_epoch, epochs=2 * epochs, initial_epoch=epochs,
+                        validation_data=datagen_test.flow(val_data, val_y, batch_size=batch_size),
+                        validation_steps=steps_per_epoch_val,
+                        callbacks=[checkpoint, reduce_lr, early_stopping])
+    model.save_weights(log_dir + 'vgg_full_trained_weights_final.h5')
+
+    return model
+
+
+def predict_vgg(model, lines):
+    train_data, y = process_lines(lines, 'vgg16')
+    # process lines returns image as arrays
+    data_to_predict = preprocess_input(train_data)
+    y_predict = model.predict(data_to_predict)
+    print("vgg full prediction")
+    print("y=\n{}".format(y))
+    print("y_predict=\n{}".format(y))
+
+
+##############################################
+### SVM over VGG features
+##############################################
+
+def train_svm(vgg_features, dataset):
     train_data, y, val_data, vy = dataset
-    # Get models
-    net, vgg_features = vgg16_get_model(num_classes)
-    # Compile
-    sgd = SGD(lr=1e-4, decay=1e-6, momentum=0.9, nesterov=True)
-    net.compile(optimizer=sgd, loss='categorical_crossentropy', metrics=['accuracy'])
+
+    # Compile TODO not compiling for predictions
+#    sgd = SGD(lr=1e-4, decay=1e-6, momentum=0.9, nesterov=True)
+#    net.compile(optimizer=sgd, loss='categorical_crossentropy', metrics=['accuracy'])
 
     print("==========================================")
     print("==== training SVM")
@@ -152,6 +240,7 @@ def train_svm(num_classes, dataset):
     svm_y_data = np.array(svm_y_data)
     svm_x_data = np.reshape(svm_x_data, (len(svm_x_data), -1))
 
+    # Param grid, after some tests I've seen that linear works well, and C=1.
     param = [
         {
             "kernel": ["linear"],
@@ -208,8 +297,6 @@ def train_svm(num_classes, dataset):
 ###############################################
 #### Mobilenet
 ###############################################
-from keras.applications import mobilenet
-from keras.optimizers import Adam
 def mobilenet1_get_model(num_classes):
     base_model = mobilenet.MobileNet(include_top=False, weights='imagenet',
                                      input_shape=(224, 224, 3))
@@ -229,14 +316,8 @@ def mobilenet1_get_model(num_classes):
 # End
 
 
-from keras.models import Sequential
-from keras.callbacks import ModelCheckpoint, LearningRateScheduler, EarlyStopping, ReduceLROnPlateau
-def train_mobilenet1(dataset, num_classes):
+def train_mobilenet1(model, dataset):
     train_data, y, val_data, vy = dataset
-
-    train_y = to_categorical(y, num_classes)
-    val_y = to_categorical(vy, num_classes)
-    model = mobilenet1_get_model(num_classes)
 
     # define input data generators
     shift = 0.1
@@ -274,7 +355,7 @@ def train_mobilenet1(dataset, num_classes):
     log_dir = 'mobilenet_logs/'
     checkpoint = ModelCheckpoint(log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
                                  monitor='val_loss', save_weights_only=True, save_best_only=True, period=3)
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1)
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1, cooldown=3)
     early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1)
 
     for layer in model.layers:
@@ -300,7 +381,7 @@ def prep_mobilenet(img_array):
 ################################################
 ################################################
 
-def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
+def train_post_classifier(lines, idxs_train, idxs_val):
     # prepare data
     lines = np.array(lines)
     train_data, y = process_lines(lines[idxs_train], type)
@@ -308,8 +389,16 @@ def train_post_classifier(lines, idxs_train, idxs_val, type='vgg16'):
     num_classes = len(classes_list)
     print("num classes {}".format(num_classes))
 
-#    train_svm(num_classes, [train_data, y, val_data, vy])
-    train_mobilenet1([train_data, y, val_data, vy], num_classes)
+    cat_y = to_categorical(y, num_classes)
+    cat_vy = to_categorical(vy, num_classes)
+
+    my_mobilenet = mobilenet1_get_model(num_classes)
+    train_mobilenet1(my_mobilenet, [train_data, cat_y, val_data, cat_vy])
+
+    vgg_classifier, vgg_features = vgg16_get_model(num_classes)
+    train_vgg(vgg_classifier, [train_data, cat_y, val_data, cat_vy])
+    train_svm(vgg_features, [train_data, y, val_data, vy])
+
 
 def predict_class(pil_image, boxes, classifier):
     if (len(boxes) == 0):
@@ -318,26 +407,48 @@ def predict_class(pil_image, boxes, classifier):
     svm = classifier['svm']
     vgg_features = classifier['net']
     my_mobilenet = classifier['mobilenet']
-    x = []
-    x_mobilent = []
+    vgg_classifier = classifier['vgg_classifier']
+
+    x_svm = []
+    x_vgg = []
+    x_img_arr = []
+
     for box in boxes:
         # boxes is a list of [top, left, bottom, right] i.e [y1, x1, y2, x2]
         y1, x1, y2, x2 = box  # TODO
-        cropped = pil_image.copy()
+        cropped = pil_image.copy()  # TODO , Do I really need to copy ?
         # crop : left, upper, right, lower
         cropped = cropped.crop((x1, y1, x2, y2))
         cropped = cropped.resize((224,224))
         cropped = image.img_to_array(cropped)
-        x_mobilent.append(cropped)
-        features = vgg_extract_features_img_array(cropped, vgg_features)
-        x.append(features)
+        features, vgg_preped = vgg_extract_features_and_prep(cropped, vgg_features)
+        x_vgg.append(vgg_preped)
+        x_img_arr.append(cropped)
+        x_svm.append(features)
 
-    x = np.reshape(x, (len(boxes), -1))
-    x_mobilent = np.reshape(x, (len(boxes), -1))
-    x_mobilent = mobilenet.preprocess_input(x_mobilent)
+    x_img_arr = np.reshape(x_img_arr, (len(boxes), -1))
 
-    y = svm.predict(x)
+    x_svm = np.reshape(x_svm, (len(boxes), -1))
+    x_vgg = np.reshape(x_vgg, (len(boxes), -1))
+    x_mobilent = mobilenet.preprocess_input(x_img_arr)
+
     y_mobilenet = my_mobilenet.predict(x_mobilent)
+    y_vgg = vgg_classifier(x_vgg)
+    y_svm = svm.predict(x_svm)
+
+    # Do voting for final classification
+    y = []
+    for a, b, c in zip(y_mobilenet, y_vgg, y_svm):
+        counts = np.bincount([a, b, c])
+        y.append(np.argmax(counts))
+
+    # debug hook
+    if True:
+        print("y mobilenet :".format(y_mobilenet))
+        print("y_vgg       :".format(y_vgg))
+        print("y_svm       :".format(y_svm))
+        print("voting y    :".format(y))
+
     return y
 # End
 

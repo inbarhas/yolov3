@@ -146,7 +146,7 @@ def _main():
 
     idxs_train = [i for i in range(num_train)]
     idxs_val = [i for i in range(num_train, len(lines))]
-    train_post_classifier(lines_multi, idxs_train, idxs_val, type='vgg16')
+    train_post_classifier(lines_multi, idxs_train, idxs_val)
     print("Done training SVM")
 
     print("DONE TRAINING - END OF FILE")
