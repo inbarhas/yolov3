@@ -126,6 +126,13 @@ def vgg_extract_features_img_array(img_array, model):
 # End
 
 
+# imgs array should already be a tensor
+def vgg_extract_features_batch(imgs_array, model):
+    prep = preprocess_input(imgs_array)
+    features = model.predict(prep)
+    return features, prep
+
+
 def train_vgg(model, dataset):
     train_data, train_y, val_data, val_y = dataset
 
@@ -410,10 +417,7 @@ def predict_class(pil_image, boxes, classifier):
     my_mobilenet = classifier['mobilenet']
     vgg_classifier = classifier['vgg_classifier']
 
-    x_svm = []
-    x_vgg = []
     x_img_arr = []
-
     for box in boxes:
         # boxes is a list of [top, left, bottom, right] i.e [y1, x1, y2, x2]
         y1, x1, y2, x2 = box  # TODO
@@ -422,33 +426,41 @@ def predict_class(pil_image, boxes, classifier):
         cropped = cropped.crop((x1, y1, x2, y2))
         cropped = cropped.resize((224,224))
         cropped = image.img_to_array(cropped)
-        features, vgg_preped = vgg_extract_features_and_prep(cropped, vgg_features)
-        x_vgg.append(vgg_preped)
         x_img_arr.append(cropped)
-        x_svm.append(features)
 
-    x_img_arr = np.reshape(x_img_arr, (len(boxes), -1))
+    x_img_arr = np.array(x_img_arr)
 
-    x_svm = np.reshape(x_svm, (len(boxes), -1))
-    x_vgg = np.reshape(x_vgg, (len(boxes), -1))
+    vgg_preped = preprocess_input(x_img_arr)
+    y_vgg = vgg_classifier.predict(vgg_preped)
+    features = vgg_features.predict(vgg_preped)
+    features = np.reshape(features, (len(boxes), -1))
+
     x_mobilent = mobilenet.preprocess_input(x_img_arr)
-
     y_mobilenet = my_mobilenet.predict(x_mobilent)
-    y_vgg = vgg_classifier(x_vgg)
-    y_svm = svm.predict(x_svm)
+    y_svm = svm.predict(features)
+
+    # raw outputs, some are softmax prob's
+    if True:
+        print("y mobilenet :{}".format(y_mobilenet))
+        print("y_vgg       :{}".format(y_vgg))
+        print("y_svm       :{}".format(y_svm))
+
+    y_mobilenet = np.argmax(y_mobilenet, axis=1)
+    y_vgg = np.argmax(y_vgg, axis=1)
 
     # Do voting for final classification
     y = []
     for a, b, c in zip(y_mobilenet, y_vgg, y_svm):
         counts = np.bincount([a, b, c])
         y.append(np.argmax(counts))
+    y = y_svm
 
     # debug hook
     if True:
-        print("y mobilenet :".format(y_mobilenet))
-        print("y_vgg       :".format(y_vgg))
-        print("y_svm       :".format(y_svm))
-        print("voting y    :".format(y))
+        print("y mobilenet :{}".format(y_mobilenet))
+        print("y_vgg       :{}".format(y_vgg))
+        print("y_svm       :{}".format(y_svm))
+        print("voting y    :{}".format(y))
 
     return y
 # End
