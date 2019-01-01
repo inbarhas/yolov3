@@ -136,7 +136,7 @@ class YOLO(object):
         my_classes = ['N/A' for i in range(len(out_boxes))]
         if classification_cb is not None:
             assert classification_cb_args is not None
-            my_classes = classification_cb(classification_cb_args)
+            my_classes = classification_cb(pil_image=image, boxes=out_boxes, classifier=classification_cb_args)
         ################################################################
 
         font = ImageFont.truetype(font='font/FiraMono-Medium.otf',
