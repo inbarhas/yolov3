@@ -26,7 +26,7 @@ network_input_shape = {
 }
 
 
-def process_lines(lines, type):
+def process_lines(lines, net_type='vgg16'):
     """
     lines shape
     /home/tamirmal/workspace/git/tau_proj_prep/TRAIN/IMG_20181226_180908_HHT.jpg 921,1663,1646,2282,0 2066,1459,2698,2002,0 2866,1067,3695,1664,0
@@ -61,7 +61,7 @@ def process_lines(lines, type):
             # crop : left, upper, right, lower
             copy_im = img.copy()
             cropped = copy_im.crop((x1, y1, x2, y2))
-            cropped = cropped.resize(network_input_shape[type])
+            cropped = cropped.resize(network_input_shape[net_type])
             sample = image.img_to_array(cropped)
             #sample = np.expand_dims(sample, axis=0)
 
@@ -169,7 +169,7 @@ def train_vgg(model, dataset):
     checkpoint = ModelCheckpoint(log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
                                  monitor='val_loss', save_weights_only=True, save_best_only=True, period=3)
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1, cooldown=3)
-    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1)
+    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1, restore_best_weights=True)
 
     for layer in model.layers:
         layer.trainable = True
@@ -346,9 +346,9 @@ def train_mobilenet1(model, dataset):
     model.compile(optimizer=Adam(lr=1e-4), loss='categorical_crossentropy',
                   metrics=['accuracy', 'mae'])
     model.summary()
-    model.fit_generator(datagen_train.flow(train_data, train_y, batch_size=batch_size),
+    model.fit_generator(datagen_train.flow(train_data, y, batch_size=batch_size),
                         steps_per_epoch=steps_per_epoch, epochs=epochs, initial_epoch=0,
-                        validation_data=datagen_test.flow(val_data, val_y, batch_size=batch_size),
+                        validation_data=datagen_test.flow(val_data, vy, batch_size=batch_size),
                         validation_steps=steps_per_epoch_val)
 
     print("unfreeze all model ...")
@@ -356,7 +356,7 @@ def train_mobilenet1(model, dataset):
     checkpoint = ModelCheckpoint(log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
                                  monitor='val_loss', save_weights_only=True, save_best_only=True, period=3)
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1, cooldown=3)
-    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1)
+    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1, restore_best_weights=True)
 
     for layer in model.layers:
         layer.trainable = True
@@ -364,9 +364,9 @@ def train_mobilenet1(model, dataset):
     model.compile(optimizer=Adam(lr=1e-4), loss='categorical_crossentropy',
                   metrics=['accuracy', 'mae'])
     model.summary()
-    model.fit_generator(datagen_train.flow(train_data, train_y, batch_size=batch_size),
+    model.fit_generator(datagen_train.flow(train_data, y, batch_size=batch_size),
                         steps_per_epoch=steps_per_epoch, epochs=2 * epochs, initial_epoch=epochs,
-                        validation_data=datagen_test.flow(val_data, val_y, batch_size=batch_size),
+                        validation_data=datagen_test.flow(val_data, vy, batch_size=batch_size),
                         validation_steps=steps_per_epoch_val,
                         callbacks=[checkpoint, reduce_lr, early_stopping])
     model.save_weights(log_dir + 'mobilenet_trained_weights_final.h5')
@@ -384,8 +384,8 @@ def prep_mobilenet(img_array):
 def train_post_classifier(lines, idxs_train, idxs_val):
     # prepare data
     lines = np.array(lines)
-    train_data, y = process_lines(lines[idxs_train], type)
-    val_data, vy = process_lines(lines[idxs_val], type)
+    train_data, y = process_lines(lines[idxs_train], net_type='vgg16')
+    val_data, vy = process_lines(lines[idxs_val], net_type='vgg16')
     num_classes = len(classes_list)
     print("num classes {}".format(num_classes))
 
