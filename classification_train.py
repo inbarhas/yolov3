@@ -88,8 +88,6 @@ def process_lines(lines, net_type='vgg16'):
 ########################################
 #### VGG16
 ########################################
-
-# Returns 2 models : One to be used as a feature extractor. One for classification
 def vgg16_get_model(num_classes):
     base_model = VGG16(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
     # freeze all layers
@@ -99,38 +97,24 @@ def vgg16_get_model(num_classes):
     print("Base model VGG summary:")
     base_model.summary()
 
-    print("Using base VGG as feature extractor")
-    vgg_features = Model(inputs=base_model.input, outputs=base_model.output)
-
     x = Sequential()
     x.add(base_model)
-    x.add(GlobalAveragePooling2D())
+    x.add(GlobalAveragePooling2D(name='svm_feed'))  # TODO This layer to be used as inputs to SVM
     x.add(Dense(128, activation='relu'))
     x.add(Dropout(0.5))
     x.add(Dense(num_classes, activation='softmax', name='predictions'))
     print("vgg - with my TOP layers")
     x.summary()
 
-    return x, vgg_features
+    # Making 2 models - one with 2 outputs. and 1 with single output of classification which we will train
+    # I train the classifier_model - as it is defined with single input & output
+    # While the double model has 2 outputs - so will need a special loss during training
+    # TODO notice the 'svm_feed' layer - this will be the output for SVM classifier
+    classifier_model = x
+    double_model = Model(inputs=x.input, outputs=[classifier_model.output, classifier_model.get_layer('svm_feed').output])
+
+    return double_model, classifier_model
 # End
-
-def vgg_extract_features_and_prep(img_array, model):
-    x = np.expand_dims(img_array, axis=0)
-    x = preprocess_input(x)
-    features = model.predict(x)
-    return features, x
-
-def vgg_extract_features_img_array(img_array, model):
-    features, _ = vgg_extract_features_and_prep(img_array, model)
-    return features
-# End
-
-
-# imgs array should already be a tensor
-def vgg_extract_features_batch(imgs_array, model):
-    prep = preprocess_input(imgs_array)
-    features = model.predict(prep)
-    return features, prep
 
 
 def train_vgg(model, dataset):
@@ -164,7 +148,7 @@ def train_vgg(model, dataset):
         layer.trainable = False
 
     model.compile(optimizer=Adam(lr=1e-4), loss='categorical_crossentropy',
-                  metrics=['accuracy', 'mae'])
+                  metrics=['accuracy'])
     model.summary()
     model.fit_generator(datagen_train.flow(train_data, train_y, batch_size=batch_size),
                         steps_per_epoch=steps_per_epoch, epochs=epochs, initial_epoch=0,
@@ -176,13 +160,13 @@ def train_vgg(model, dataset):
     checkpoint = ModelCheckpoint(log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
                                  monitor='val_loss', save_weights_only=True, save_best_only=True, period=3)
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1, cooldown=3)
-    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1, restore_best_weights=True)
+    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=20, verbose=1, restore_best_weights=True)
 
     for layer in model.layers:
         layer.trainable = True
 
-    model.compile(optimizer=Adam(lr=1e-4), loss='categorical_crossentropy',
-                  metrics=['accuracy', 'mae'])
+    model.compile(optimizer=Adam(lr=1e-5), loss='categorical_crossentropy',
+                  metrics=['accuracy'])
     model.summary()
     model.fit_generator(datagen_train.flow(train_data, train_y, batch_size=batch_size),
                         steps_per_epoch=steps_per_epoch, epochs=2 * epochs, initial_epoch=epochs,
@@ -201,53 +185,60 @@ def predict_vgg(model, lines):
     y_predict = model.predict(data_to_predict)
     print("vgg full prediction")
     print("y=\n{}".format(y))
-    print("y_predict=\n{}".format(y))
+    print("y_predict=\n{}".format(y_predict))
+    y_cls = y_predict[0]
+    y_for_svm = y_predict[1]
+    print("y_cls=\n{}".format(np.argmax(y_cls, axis=1)))
+    print("y_for_svm_shape=\n{}".format(y_for_svm.shape))
 
 
 ##############################################
 ### SVM over VGG features
 ##############################################
+def vgg_extract_features_img_array(img_array, model):
+    x = np.expand_dims(img_array, axis=0)
+    x = preprocess_input(x)
+    # model with 2 outputs. 2nd one is the features
+    _, features = model.predict(x)
+    return features
+# End
 
-def train_svm(vgg_features, dataset):
-    train_data, y, val_data, vy = dataset
 
-    # Compile TODO not compiling for predictions
-#    sgd = SGD(lr=1e-4, decay=1e-6, momentum=0.9, nesterov=True)
-#    net.compile(optimizer=sgd, loss='categorical_crossentropy', metrics=['accuracy'])
-
+def train_svm(model, dataset):
+    train_data, train_y, val_data, val_y = dataset
     print("==========================================")
     print("==== training SVM")
     print("==========================================")
-
+    print("len of train x {}, y {}".format(len(train_data), len(train_y)))
+    print("len of test x {}, y {}".format(len(val_data), len(val_y)))
     # define input data generators
     shift = 0.1
     datagen_train = ImageDataGenerator(rotation_range=30, width_shift_range=shift, height_shift_range=shift,
                                        horizontal_flip=True, zoom_range=0.2)
     datagen_train.fit(train_data)
-
-    # For validation, do not rotate. do less augmentation
-    shift = 0.05
-    datagen_test = ImageDataGenerator(width_shift_range=shift, height_shift_range=shift,
-                                      horizontal_flip=True, zoom_range=0.1)
-    datagen_test.fit(val_data)
-
     samples_train = 50 * len(train_data)
-    print("Generating {} testing examples, using data aug".format(samples_train))
     svm_x_data = []
     svm_y_data = []
     cnt = 0
-    for x_batch, y_batch in datagen_train.flow(train_data, y, batch_size=1):
-        svm_x_data.append(vgg_extract_features_img_array(x_batch[0], vgg_features))
+    for x_batch, y_batch in datagen_train.flow(train_data, train_y, batch_size=1):
+        svm_x_data.append(vgg_extract_features_img_array(x_batch[0], model))
         svm_y_data.append(y_batch[0])
         cnt += 1
         if cnt > samples_train:
             break
 
+    print("len of x : {}".format(len(svm_x_data)))
+    print("len of y : {}".format(len(svm_y_data)))
+    print("shape of x[0] : {}".format(svm_x_data[0].shape))
+    print("shape of y[0] : {}".format(svm_y_data[0].shape))
+
     svm_x_data = np.array(svm_x_data)
     svm_y_data = np.array(svm_y_data)
     svm_x_data = np.reshape(svm_x_data, (len(svm_x_data), -1))
 
-    # Param grid, after some tests I've seen that linear works well, and C=1.
+    print("shape of x : {}".format(svm_x_data.shape))
+    print("shape of y : {}".format(svm_y_data.shape))
+
     param = [
         {
             "kernel": ["linear"],
@@ -258,30 +249,34 @@ def train_svm(vgg_features, dataset):
     # request probability estimation
     svm = SVC(probability=True)
     # 10-fold cross validation, use 4 thread as each fold and each parameter set can be train in parallel
-    clf = GridSearchCV(svm, param, cv=4, n_jobs=4, verbose=3)
-    # import ipdb; ipdb.set_trace()
+    clf = GridSearchCV(svm, param, cv=4, n_jobs=1, verbose=3)
     clf.fit(svm_x_data, svm_y_data)
     print("\nBest parameters set:")
     print(clf.best_params_)
     clf = clf.best_estimator_
 
     print("Run on test set :")
+    # validation data generator
+    shift = 0.05
+    datagen_test = ImageDataGenerator(width_shift_range=shift, height_shift_range=shift,
+                                      horizontal_flip=True, zoom_range=0.1)
+    datagen_test.fit(val_data)
+
     samples_val = 20 * len(train_data)
-    print("Generating {} testing examples, using data aug".format(samples_val))
     val_svm_x_data = []
     val_svm_y_data = []
     cnt = 0
-    for x_batch, y_batch in datagen_train.flow(val_data, vy, batch_size=1):
-        val_svm_x_data.append(vgg_extract_features_img_array(x_batch[0], vgg_features))
+    for x_batch, y_batch in datagen_train.flow(val_data, val_y, batch_size=1):
+        val_svm_x_data.append(vgg_extract_features_img_array(x_batch[0], model))
         val_svm_y_data.append(y_batch[0])
         cnt += 1
         if cnt > samples_val:
             break
 
     val_svm_x_data = np.array(val_svm_x_data)
+    val_svm_x_data = np.reshape(val_svm_x_data, (len(val_svm_x_data), -1))
     val_svm_y_data = np.array(val_svm_y_data)
 
-    val_svm_x_data = np.reshape(val_svm_x_data, (len(val_svm_x_data), -1))
     y_predict = clf.predict(val_svm_x_data)
 
     print("y predicted")
@@ -294,10 +289,8 @@ def train_svm(vgg_features, dataset):
     print(classification_report(val_svm_y_data, y_predict))
 
     out_cls_path = 'svm.dump'
-    print("Saving SVM to {}".format(out_cls_path))
     joblib.dump(clf, out_cls_path)
-    print("done saving SVM")
-    print("End of SVM training")
+    print("done training svm. best model saved to {}".format(out_cls_path))
 # End
 
 
@@ -351,7 +344,7 @@ def train_mobilenet1(model, dataset):
         layer.trainable = False
 
     model.compile(optimizer=Adam(lr=1e-4), loss='categorical_crossentropy',
-                  metrics=['accuracy', 'mae'])
+                  metrics=['accuracy'])
     model.summary()
     model.fit_generator(datagen_train.flow(train_data, y, batch_size=batch_size),
                         steps_per_epoch=steps_per_epoch, epochs=epochs, initial_epoch=0,
@@ -369,7 +362,7 @@ def train_mobilenet1(model, dataset):
         layer.trainable = True
 
     model.compile(optimizer=Adam(lr=1e-4), loss='categorical_crossentropy',
-                  metrics=['accuracy', 'mae'])
+                  metrics=['accuracy'])
     model.summary()
     model.fit_generator(datagen_train.flow(train_data, y, batch_size=batch_size),
                         steps_per_epoch=steps_per_epoch, epochs=2 * epochs, initial_epoch=epochs,
@@ -399,23 +392,27 @@ def train_post_classifier(lines, idxs_train, idxs_val):
     cat_y = to_categorical(y, num_classes)
     cat_vy = to_categorical(vy, num_classes)
 
-    my_mobilenet = mobilenet1_get_model(num_classes)
-    train_mobilenet1(my_mobilenet, [train_data, cat_y, val_data, cat_vy])
+    ### Mobilenet ###
+    #my_mobilenet = mobilenet1_get_model(num_classes)
+    #train_mobilenet1(my_mobilenet, [train_data, cat_y, val_data, cat_vy])
 
-    vgg_classifier, vgg_features = vgg16_get_model(num_classes)
+    ### VGG ###
+    vgg_double, vgg_classifier = vgg16_get_model(num_classes)
     train_vgg(vgg_classifier, [train_data, cat_y, val_data, cat_vy])
-    ## TODO important, SVM used the trained VGG as feature-extractor ! not original with imagenet
-    train_svm(vgg_features, [train_data, y, val_data, vy])
+
+    ### SVM over VGG ###
+    train_svm(vgg_double, [train_data, y, val_data, vy])
 
 
 def predict_class(pil_image, boxes, classifier):
-    if (len(boxes) == 0):
+    if len(boxes) == 0:
         return []
 
-    svm = classifier['svm']
-    vgg_features = classifier['vgg_features']
-    my_mobilenet = classifier['mobilenet']
-    vgg_classifier = classifier['vgg_classifier']
+    # Unpack classifiers (I know this is ineffective! should not be passed on stack but constant in bss ...)
+    # if key does not exists, get returns None ...
+    svm, vgg, mymobilenet = [classifier.get(name) for name in ['svm', 'vgg', 'mobilenet']]
+    # VGG must be present!
+    assert vgg is not None
 
     x_img_arr = []
     for box in boxes:
@@ -431,13 +428,18 @@ def predict_class(pil_image, boxes, classifier):
     x_img_arr = np.array(x_img_arr)
 
     vgg_preped = preprocess_input(x_img_arr)
-    y_vgg = vgg_classifier.predict(vgg_preped)
-    features = vgg_features.predict(vgg_preped)
-    features = np.reshape(features, (len(boxes), -1))
+    y_vgg, features = vgg.predict(vgg_preped)
 
-    x_mobilent = mobilenet.preprocess_input(x_img_arr)
-    y_mobilenet = my_mobilenet.predict(x_mobilent)
-    y_svm = svm.predict(features)
+    if svm is not None:
+        y_svm = svm.predict(features)
+    else:
+        y_svm = y_vgg
+
+    if mymobilenet is not None:
+        x_mobilent = mobilenet.preprocess_input(x_img_arr)
+        y_mobilenet = mymobilenet.predict(x_mobilent)
+    else:
+        y_mobilenet = y_vgg
 
     """
     # raw outputs, some are softmax prob's

@@ -88,34 +88,22 @@ if __name__ == '__main__':
         '--classes', type=str, dest='classes_path',
         help='path to class definitions, default ' + YOLO.get_defaults("classes_path")
     )
-    parser.add_argument(
-        '--gpu_num', type=int,
-        help='Number of GPU to use, default ' + str(YOLO.get_defaults("gpu_num"))
-    )
-#    parser.add_argument(
-#        '--post', type=str, dest='post_cls', default='svm',
-#        help='post classificator to use, default is SVM',
-#    )
-
     parser.add_argument('--path', type=str, help='test path')
     FLAGS = parser.parse_args()
-    FLAGS.image = True
 
     classificator = {}
-    cls_type = 'svm'
     print("loading classifier : svm / vgg")
     cls = joblib.load('model_data/svm.dump')
-    vgg_classifier, vgg_feature_extractor = vgg16_get_model(num_classes=4)
+    vgg_double, _ = vgg16_get_model(num_classes=4)
     print("loading vgg weights")
-    vgg_classifier.load_weights('model_data/vgg_full_trained_weights_final.h5')
-    print("loading classifier : mobilenet")
-    mobilenet = mobilenet1_get_model(num_classes=4) # TODO change this one moving to final dataset
-    mobilenet.load_weights('model_data/mobilenet_final_weights.h5')
+    vgg_double.load_weights('model_data/vgg_full_trained_weights_final.h5')
+#    print("loading classifier : mobilenet")
+#    mobilenet = mobilenet1_get_model(num_classes=4) # TODO change this one moving to final dataset
+#    mobilenet.load_weights('model_data/mobilenet_final_weights.h5')
 
     classificator['svm'] = cls
-    classificator['vgg_features'] = vgg_feature_extractor
-    classificator['vgg_classifier'] = vgg_classifier
-    classificator['mobilenet'] = mobilenet
+    classificator['vgg'] = vgg_double
+ #   classificator['mobilenet'] = mobilenet
 
     """
     Image detection mode, disregard any remaining command line arguments
@@ -124,4 +112,5 @@ if __name__ == '__main__':
     if "input" in FLAGS:
         print(" Ignoring remaining command line arguments: " + FLAGS.input + "," + FLAGS.output)
 
-    detect_img(YOLO(**vars(FLAGS)), FLAGS.path, classificator, visualize=False)
+    detect_img(YOLO(**vars(FLAGS)), FLAGS.path, classificator, visualize=True)
+
