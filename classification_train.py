@@ -16,7 +16,7 @@ from keras.applications import mobilenet
 from keras.optimizers import Adam
 from keras.models import Sequential
 from keras.callbacks import ModelCheckpoint, LearningRateScheduler, EarlyStopping, ReduceLROnPlateau
-
+import logging
 
 classes_list = []
 
@@ -433,7 +433,7 @@ def predict_class(pil_image, boxes, classifier):
     if svm is not None:
         y_svm = svm.predict(features)
     else:
-        y_svm = y_vgg
+        y_svm = np.argmax(y_vgg, axis=1)
 
     if mymobilenet is not None:
         x_mobilent = mobilenet.preprocess_input(x_img_arr)
@@ -449,6 +449,7 @@ def predict_class(pil_image, boxes, classifier):
         print("y_svm       :{}".format(y_svm))
     """
 
+    # Transform probabilities to labels (svm is alrady labels)
     y_mobilenet = np.argmax(y_mobilenet, axis=1)
     y_vgg = np.argmax(y_vgg, axis=1)
 
@@ -457,14 +458,11 @@ def predict_class(pil_image, boxes, classifier):
     for a, b, c in zip(y_mobilenet, y_vgg, y_svm):
         counts = np.bincount([a, b, c])
         y.append(np.argmax(counts))
-    y = y_svm
 
-    # debug hook
-    if True:
-        print("y mobilenet :{}".format(y_mobilenet))
-        print("y_vgg       :{}".format(y_vgg))
-        print("y_svm       :{}".format(y_svm))
-        print("voting y    :{}".format(y))
+    logging.debug("y mobilenet :{}".format(y_mobilenet))
+    logging.debug("y_vgg       :{}".format(y_vgg))
+    logging.debug("y_svm       :{}".format(y_svm))
+    logging.debug("voting y    :{}".format(y))
 
     return y
 # End

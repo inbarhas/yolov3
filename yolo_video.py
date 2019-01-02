@@ -11,7 +11,7 @@ from keras.applications.vgg16 import preprocess_input
 from keras.optimizers import SGD
 from keras.models import Model
 from classification_train import predict_class, mobilenet1_get_model, vgg16_get_model
-
+import logging
 
 classes_remap = None
 # For actual project
@@ -27,43 +27,46 @@ classes_remap = {
 """
 
 
-def detect_img(yolo, path, cls=None, visualize=False):
-    for imgname in os.listdir(path):
-        if imgname.lower().endswith('.jpg') or imgname.lower().endswith('.jpeg'):
-            print('Input image filename:{}'.format(imgname))
-            image = Image.open(os.path.join(path, imgname))
-            r_image, boxes, scores, classes = yolo.detect_image(image, predict_class, cls, visualize=visualize)
-            """
-            # Classify this bounding box
-            if cls:
-                # boxes is a list of [top, left, bottom, right] i.e [y1, x1, y2, x2]
-                y = predict_class(image, boxes, cls)
-                print('y = {}'.format(y))
-            """
+def detect_img(yolo, imgs_path, outf, cls=None, visualize=False):
+    with open(outf, 'w') as of:
+        for imgname in os.listdir(imgs_path):
+            if imgname.lower().endswith('.jpg') or imgname.lower().endswith('.jpeg'):
+                logging.debug('Input image filename:{}'.format(imgname))
+                image = Image.open(os.path.join(imgs_path, imgname))
+                r_image, boxes, scores, classes = yolo.detect_image(image, predict_class, cls, visualize=visualize)
+                """
+                # Classify this bounding box
+                if cls:
+                    # boxes is a list of [top, left, bottom, right] i.e [y1, x1, y2, x2]
+                    y = predict_class(image, boxes, cls)
+                    print('y = {}'.format(y))
+                """
 
-            if len(boxes) == 0:
-                continue
+                if len(boxes) == 0:
+                    continue
 
-            # Output format
-            # PIC.JPG:[xmin1,ymin1,width1,height1,color1],..,[xminN,yminN,widthN,heightN,colorN]
-            output_line = "{}:".format(imgname)
-            for i, b in enumerate(boxes):
-                y1, x1, y2, x2 = b
-                predicted_class = classes[i]
-                if classes_remap is not None:
-                    predicted_class = classes_remap[int(predicted_class)]
+                # Output format
+                # PIC.JPG:[xmin1,ymin1,width1,height1,color1],..,[xminN,yminN,widthN,heightN,colorN]
+                output_line = "{}:".format(imgname)
+                for i, b in enumerate(boxes):
+                    y1, x1, y2, x2 = b
+                    predicted_class = classes[i]
+                    if classes_remap is not None:
+                        predicted_class = classes_remap[int(predicted_class)]
 
-                output_line += "[{},{},{},{},{}]".format(x1, y1, x2 - x1, y2 - y1, predicted_class)
-                if i < (len(boxes) - 1):
-                    output_line += ','
-                else:
-                    output_line += '\n'
+                    output_line += "[{},{},{},{},{}]".format(x1, y1, x2 - x1, y2 - y1, predicted_class)
+                    if i < (len(boxes) - 1):
+                        output_line += ','
+                    else:
+                        output_line += '\n'
 
-            print(output_line)
-            if r_image:
-                pyplot.figure()
-                pyplot.imshow(np.asarray(r_image))
-                pyplot.show()
+                of.write(output_line)
+                logging.debug(output_line)
+
+                if r_image:
+                    pyplot.figure()
+                    pyplot.imshow(np.asarray(r_image))
+                    pyplot.show()
 
     yolo.close_session()
 
@@ -112,5 +115,13 @@ if __name__ == '__main__':
     if "input" in FLAGS:
         print(" Ignoring remaining command line arguments: " + FLAGS.input + "," + FLAGS.output)
 
-    detect_img(YOLO(**vars(FLAGS)), FLAGS.path, classificator, visualize=True)
+    detect_img(YOLO(**vars(FLAGS)), imgs_path=FLAGS.path, outf='result.txt', cls=classificator, visualize=True)
 
+    """
+    yolo_args = {
+        'model_path': os.path.join('proj_models', 'final_single_cust_loss4_anchs.h5'),
+        'anchors_path': os.path.join('model_data', 'bus_anchors.txt'),
+        'classes_path': os.path.join('model_data', 'bus_classes_single.txt'),
+    }
+    detect_img(YOLO(**yolo_args), FLAGS.path, classificator, visualize=True)
+    """

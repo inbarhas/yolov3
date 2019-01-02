@@ -1,8 +1,14 @@
 import numpy as np
 import ast
 import os
+from yolo_video import detect_img
+from yolo import YOLO, detect_video
+from sklearn.externals import joblib
+from classification_train import vgg16_get_model
+import logging
 
-def run(myAnnFileName, buses):
+
+def maya_run(myAnnFileName, buses):
 	
     annFileNameGT = os.path.join(os.getcwd(),'annotationsTrain.txt')
     writtenAnnsLines = {}
@@ -33,3 +39,27 @@ def run(myAnnFileName, buses):
                 else:
                     strToWrite += ','
         annFileEstimations.write(strToWrite)
+# End
+
+
+def run(estimatedAnnFileName, busDir):
+    classificator = {}
+    logging.debug("loading classifier : svm / vgg")
+    cls = joblib.load('model_data/svm.dump')
+    vgg_double, _ = vgg16_get_model(num_classes=4)
+    logging.debug("loading vgg weights")
+    vgg_double.load_weights('model_data/vgg_full_trained_weights_final.h5')
+    #    print("loading classifier : mobilenet")
+    #    mobilenet = mobilenet1_get_model(num_classes=4) # TODO change this one moving to final dataset
+    #    mobilenet.load_weights('model_data/mobilenet_final_weights.h5')
+
+    classificator['svm'] = cls
+    classificator['vgg'] = vgg_double
+    #   classificator['mobilenet'] = mobilenet
+
+    yolo_args = {
+        'model_path': os.path.join('proj_models', 'final_single_cust_loss4_anchs.h5'),
+        'anchors_path': os.path.join('model_data', 'bus_anchors.txt'),
+        'classes_path': os.path.join('model_data', 'bus_classes_single.txt'),
+    }
+    detect_img(YOLO(**yolo_args), busDir, classificator, visualize=False)

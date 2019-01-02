@@ -6,6 +6,7 @@ Class definition of YOLO_v3 style detection model on image and video
 import colorsys
 import os
 from timeit import default_timer as timer
+import logging
 
 import numpy as np
 from keras import backend as K
@@ -118,7 +119,7 @@ class YOLO(object):
             boxed_image = letterbox_image(image, new_image_size)
         image_data = np.array(boxed_image, dtype='float32')
 
-        print(image_data.shape)
+        logging.debug(image_data.shape)
         image_data /= 255.
         image_data = np.expand_dims(image_data, 0)  # Add batch dimension.
 
@@ -130,7 +131,7 @@ class YOLO(object):
                 K.learning_phase(): 0
             })
 
-        print('Found {} boxes for {}'.format(len(out_boxes), 'img'))
+        logging.debug('Found {} boxes for {}'.format(len(out_boxes), 'img'))
 
         ################## TAMIR Classification CB ####################
         my_classes = ['N/A'] * len(out_boxes)
@@ -140,7 +141,7 @@ class YOLO(object):
         ################################################################
 
         end = timer()
-        print(end - start)
+        logging.debug(end - start)
 
         # If not visualizing - can return here.
         if visualize is False:
@@ -171,7 +172,7 @@ class YOLO(object):
             left = max(0, np.floor(left + 0.5).astype('int32'))
             bottom = min(image.size[1], np.floor(bottom + 0.5).astype('int32'))
             right = min(image.size[0], np.floor(right + 0.5).astype('int32'))
-            print(label, (left, top), (right, bottom))
+            logging.debug(label, (left, top), (right, bottom))
 
             if top - label_size[1] >= 0:
                 text_origin = np.array([left, top - label_size[1]])
