@@ -45,13 +45,13 @@ def maya_run(myAnnFileName, buses):
 def run(estimatedAnnFileName, busDir):
     classificator = {}
     logging.debug("loading classifier : svm / vgg")
-    cls = joblib.load('model_data/svm.dump')
+    cls = joblib.load(os.path.join('model_data', 'svm.dump'))
     vgg_double, _ = vgg16_get_model(num_classes=4)
     logging.debug("loading vgg weights")
-    vgg_double.load_weights('model_data/vgg_full_trained_weights_final.h5')
+    vgg_double.load_weights(os.path.join('model_data', 'vgg_full_trained_weights_final.h5'))
     #    print("loading classifier : mobilenet")
     #    mobilenet = mobilenet1_get_model(num_classes=4) # TODO change this one moving to final dataset
-    #    mobilenet.load_weights('model_data/mobilenet_final_weights.h5')
+    #    mobilenet.load_weights(os.path.join('model_data', 'mobilenet_final_weights.h5'))
 
     classificator['svm'] = cls
     classificator['vgg'] = vgg_double
@@ -62,4 +62,4 @@ def run(estimatedAnnFileName, busDir):
         'anchors_path': os.path.join('model_data', 'bus_anchors.txt'),
         'classes_path': os.path.join('model_data', 'bus_classes_single.txt'),
     }
-    detect_img(YOLO(**yolo_args), busDir, classificator, visualize=False)
+    detect_img(YOLO(**yolo_args), imgs_path=busDir, outf=estimatedAnnFileName, cls=classificator, remap=True, visualize=False)

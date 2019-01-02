@@ -13,9 +13,6 @@ from keras.models import Model
 from classification_train import predict_class, mobilenet1_get_model, vgg16_get_model
 import logging
 
-classes_remap = None
-# For actual project
-"""
 classes_remap = {
     0: 1, # Green
     1: 2, # Yellow
@@ -24,10 +21,9 @@ classes_remap = {
     4: 5, # Blue
     5: 6, # Red
 }
-"""
 
 
-def detect_img(yolo, imgs_path, outf, cls=None, visualize=False):
+def detect_img(yolo, imgs_path, outf, cls=None, remap=False, visualize=False):
     with open(outf, 'w') as of:
         for imgname in os.listdir(imgs_path):
             if imgname.lower().endswith('.jpg') or imgname.lower().endswith('.jpeg'):
@@ -51,7 +47,7 @@ def detect_img(yolo, imgs_path, outf, cls=None, visualize=False):
                 for i, b in enumerate(boxes):
                     y1, x1, y2, x2 = b
                     predicted_class = classes[i]
-                    if classes_remap is not None:
+                    if remap:
                         predicted_class = classes_remap[int(predicted_class)]
 
                     output_line += "[{},{},{},{},{}]".format(x1, y1, x2 - x1, y2 - y1, predicted_class)
@@ -115,7 +111,7 @@ if __name__ == '__main__':
     if "input" in FLAGS:
         print(" Ignoring remaining command line arguments: " + FLAGS.input + "," + FLAGS.output)
 
-    detect_img(YOLO(**vars(FLAGS)), imgs_path=FLAGS.path, outf='result.txt', cls=classificator, visualize=True)
+    detect_img(YOLO(**vars(FLAGS)), imgs_path=FLAGS.path, outf='result.txt', remap=False, cls=classificator, visualize=True)
 
     """
     yolo_args = {
