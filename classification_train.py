@@ -439,11 +439,13 @@ def predict_class(pil_image, boxes, classifier):
     y_mobilenet = my_mobilenet.predict(x_mobilent)
     y_svm = svm.predict(features)
 
+    """
     # raw outputs, some are softmax prob's
-    if True:
+    if False:
         print("y mobilenet :{}".format(y_mobilenet))
         print("y_vgg       :{}".format(y_vgg))
         print("y_svm       :{}".format(y_svm))
+    """
 
     y_mobilenet = np.argmax(y_mobilenet, axis=1)
     y_vgg = np.argmax(y_vgg, axis=1)

@@ -13,12 +13,26 @@ from keras.models import Model
 from classification_train import predict_class, mobilenet1_get_model, vgg16_get_model
 
 
-def detect_img(yolo, path, cls=None, cls_type='svm'):
+classes_remap = None
+# For actual project
+"""
+classes_remap = {
+    0: 1, # Green
+    1: 2, # Yellow
+    2: 3, # White
+    3: 4, # Silver/Grey
+    4: 5, # Blue
+    5: 6, # Red
+}
+"""
+
+
+def detect_img(yolo, path, cls=None, visualize=False):
     for imgname in os.listdir(path):
         if imgname.lower().endswith('.jpg') or imgname.lower().endswith('.jpeg'):
             print('Input image filename:{}'.format(imgname))
             image = Image.open(os.path.join(path, imgname))
-            r_image, boxes, scores = yolo.detect_image(image, predict_class, cls)
+            r_image, boxes, scores, classes = yolo.detect_image(image, predict_class, cls, visualize=visualize)
             """
             # Classify this bounding box
             if cls:
@@ -26,9 +40,31 @@ def detect_img(yolo, path, cls=None, cls_type='svm'):
                 y = predict_class(image, boxes, cls)
                 print('y = {}'.format(y))
             """
-            pyplot.figure()
-            pyplot.imshow(np.asarray(r_image))
-            pyplot.show()
+
+            if len(boxes) == 0:
+                continue
+
+            # Output format
+            # PIC.JPG:[xmin1,ymin1,width1,height1,color1],..,[xminN,yminN,widthN,heightN,colorN]
+            output_line = "{}:".format(imgname)
+            for i, b in enumerate(boxes):
+                y1, x1, y2, x2 = b
+                predicted_class = classes[i]
+                if classes_remap is not None:
+                    predicted_class = classes_remap[int(predicted_class)]
+
+                output_line += "[{},{},{},{},{}]".format(x1, y1, x2 - x1, y2 - y1, predicted_class)
+                if i < (len(boxes) - 1):
+                    output_line += ','
+                else:
+                    output_line += '\n'
+
+            print(output_line)
+            if r_image:
+                pyplot.figure()
+                pyplot.imshow(np.asarray(r_image))
+                pyplot.show()
+
     yolo.close_session()
 
 
@@ -87,4 +123,5 @@ if __name__ == '__main__':
     print("Image detection mode")
     if "input" in FLAGS:
         print(" Ignoring remaining command line arguments: " + FLAGS.input + "," + FLAGS.output)
-    detect_img(YOLO(**vars(FLAGS)), FLAGS.path, classificator, cls_type)
+
+    detect_img(YOLO(**vars(FLAGS)), FLAGS.path, classificator, visualize=False)

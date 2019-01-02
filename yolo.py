@@ -105,7 +105,7 @@ class YOLO(object):
                 score_threshold=self.score, iou_threshold=self.iou)
         return boxes, scores, classes
 
-    def detect_image(self, image, classification_cb=None, classification_cb_args=None):
+    def detect_image(self, image, classification_cb=None, classification_cb_args=None, visualize=False):
         start = timer()
 
         if self.model_image_size != (None, None):
@@ -133,11 +133,19 @@ class YOLO(object):
         print('Found {} boxes for {}'.format(len(out_boxes), 'img'))
 
         ################## TAMIR Classification CB ####################
-        my_classes = ['N/A' for i in range(len(out_boxes))]
+        my_classes = ['N/A'] * len(out_boxes)
         if classification_cb is not None:
             assert classification_cb_args is not None
             my_classes = classification_cb(pil_image=image, boxes=out_boxes, classifier=classification_cb_args)
         ################################################################
+
+        end = timer()
+        print(end - start)
+
+        # If not visualizing - can return here.
+        if visualize is False:
+            return None, out_boxes, out_scores, my_classes
+        # Else - continue and returned annotated image
 
         font = ImageFont.truetype(font='font/FiraMono-Medium.otf',
                     size=np.floor(3e-2 * image.size[1] + 0.5).astype('int32'))
@@ -181,9 +189,7 @@ class YOLO(object):
             draw.text(text_origin, label, fill=(0, 0, 0), font=font)
             del draw
 
-        end = timer()
-        print(end - start)
-        return image, out_boxes, out_scores
+        return image, out_boxes, out_scores, my_classes
 
     def close_session(self):
         self.sess.close()
