@@ -50,9 +50,9 @@ def _main():
         annotation_path = 'train_single.txt'
     else:
         classes_path = 'model_data/bus_classes.txt'
-        annotation_path = 'train.txt'
+        annotation_path = 'train_multi.txt'
 
-    annotations_multi_path = 'train.txt'
+    annotations_multi_path = 'train_multi.txt'
 
     if options.anchors_path:
         anchors_path = options.anchors_path
