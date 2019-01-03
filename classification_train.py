@@ -135,7 +135,7 @@ def train_vgg(model, dataset):
                                       horizontal_flip=True, zoom_range=0.1)
     datagen_test.fit(val_data)
 
-    epochs = 100
+    epochs = 200
     batch_size = 32
     steps_per_epoch = int(len(train_data) / batch_size)
     steps_per_epoch_val = int(len(val_data) / batch_size)
@@ -143,8 +143,9 @@ def train_vgg(model, dataset):
     print("len data {}, len val {}".format(len(train_data), len(val_data)))
     print("steps per epoch : {}, val : {}".format(steps_per_epoch, steps_per_epoch_val))
 
-    print("Freezing everything except last 5 layers")
-    for layer in model.layers[:-5]:
+    print("Freezing base")
+    for layer in model.layers[0]:
+        print("layer name : {}".format(layer.name))
         layer.trainable = False
 
     model.compile(optimizer=Adam(lr=1e-4), loss='categorical_crossentropy',
