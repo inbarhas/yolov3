@@ -118,7 +118,7 @@ def process_lines(lines, net_type='resnet50'):
 def get_resnet50(num_classes):
     base_model = ResNet50(include_top=False, weights='imagenet', input_shape=(224, 224, 3), pooling='avg')
     for layer in base_model.layers:
-        print("freezing layer {}".format(layer.name))
+#        print("freezing layer {}".format(layer.name))
         layer.trainable = False
 
     x = base_model.output
@@ -163,13 +163,12 @@ def train_classifier(model, dataset, prep_func, optimzer, lr, net):
     elif optimzer == 'SGD':
         opt = 'SGD'
 
-
     model.compile(loss='categorical_crossentropy',
                   optimizer=opt,
                   metrics=['accuracy'])
 
 #    model.summary()
-    log_dir = os.path.join('logs', '_' + net + optimzer + '_' + str(lr) + ' _best_weights.h5')
+    log_dir = os.path.join('logs', net + '_' + optimzer + '_' + str(lr) + '_best_weights.h5')
     checkpoint = ModelCheckpoint(log_dir,
                                  monitor='val_loss', save_weights_only=True, save_best_only=True)
 
@@ -179,8 +178,8 @@ def train_classifier(model, dataset, prep_func, optimzer, lr, net):
                         validation_steps=steps_per_epoch_val)
 
     print("Adding reduceLR callback, early stop")
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1, cooldown=3)
-#    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1)
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=5, verbose=1, cooldown=5)
+    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1)
 
 #    model.compile(loss='categorical_crossentropy',
 #                  optimizer=opt,
@@ -190,10 +189,9 @@ def train_classifier(model, dataset, prep_func, optimzer, lr, net):
                         steps_per_epoch=steps_per_epoch, epochs=2 * epochs, initial_epoch=epochs,
                         validation_data=datagen_test.flow(val_data, val_y, batch_size=batch_size),
                         validation_steps=steps_per_epoch_val,
-                        callbacks=[checkpoint, reduce_lr])
-    print("restore best weights from checkpoint")
+                        callbacks=[checkpoint, reduce_lr, early_stopping])
+    print("restore best weights from checkpoint ({})".format(log_dir))
     model.load_weights(log_dir)
-
     return model
 
 
@@ -244,9 +242,9 @@ def predict_class(pil_image, boxes, classifier):
 
     # Unpack classifiers (I know this is ineffective! should not be passed on stack but constant in bss ...)
     # if key does not exists, get returns None ...
-    svm, vgg, mymobilenet = [classifier.get(name) for name in ['svm', 'vgg', 'mobilenet']]
-    # VGG must be present!
-    assert vgg is not None
+    resnet18, resnet34, resnet50 = [classifier.get(name) for name in ['resnet18', 'resnet34', 'resnet50']]
+
+    assert resnet50 is not None
 
     x_img_arr = []
     for box in boxes:
@@ -260,37 +258,18 @@ def predict_class(pil_image, boxes, classifier):
         x_img_arr.append(cropped)
 
     x_img_arr = np.array(x_img_arr)
-
-    vgg_preped = preprocess_input(x_img_arr)
-    y_vgg, features = vgg.predict(vgg_preped)
-
-    if svm is not None:
-        y_svm = svm.predict(features)
-    else:
-        y_svm = np.argmax(y_vgg, axis=1)
-
-    if mymobilenet is not None:
-        x_mobilent = mobilenet.preprocess_input(x_img_arr)
-        y_mobilenet = mymobilenet.predict(x_mobilent)
-    else:
-        y_mobilenet = y_vgg
-
+    preped = preprocess_input(x_img_arr)
+    y_preds = resnet50.predict(preped)
     # Transform probabilities to labels (svm is alrady labels)
-    y_mobilenet = np.argmax(y_mobilenet, axis=1)
-    y_vgg = np.argmax(y_vgg, axis=1)
+    y_pred = np.argmax(y_preds, axis=1)
 
-    # Do voting for final classification
-    y = []
-    for a, b, c in zip(y_mobilenet, y_vgg, y_svm):
-        counts = np.bincount([a, b, c])
-        y.append(np.argmax(counts))
-
+    """
     logging.debug("y mobilenet :{}".format(y_mobilenet))
     logging.debug("y_vgg       :{}".format(y_vgg))
     logging.debug("y_svm       :{}".format(y_svm))
     logging.debug("voting y    :{}".format(y))
-
-    return y
+    """
+    return y_pred
 # End
 
 

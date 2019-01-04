@@ -238,8 +238,8 @@ def train_post_classifier(lines, idxs_train, idxs_val):
     resnet34 = get_resnet34(num_classes)
     print("========= Training resnet18")
     train_classifier(resnet18, [train_data, cat_y, val_data, cat_vy], 'resnet18')
-    print("========= Training resnet34")
-    train_classifier(resnet34, [train_data, cat_y, val_data, cat_vy], 'resnet34')
+#    print("========= Training resnet34")
+#    train_classifier(resnet34, [train_data, cat_y, val_data, cat_vy], 'resnet34')
     print("===========================================")
     prep = preprocess_input(val_data.copy)
     print("==== test resnet18 ====")
@@ -252,6 +252,8 @@ def train_post_classifier(lines, idxs_train, idxs_val):
     print(confusion_matrix(vy, preds))
     print("\nClassification report:")
     print(classification_report(vy, preds))
+
+    """
     print("===========================================")
     print("==== test resnet34 ====")
     print("y_gt : {}".format(vy))
@@ -274,13 +276,23 @@ def train_post_classifier(lines, idxs_train, idxs_val):
     print(confusion_matrix(vy, preds))
     print("\nClassification report:")
     print(classification_report(vy, preds))
-
     print("--- END ---")
+    """
 
-
-from skimage.io import imread
 def main():
+    with open('/home/tamir/PycharmProjects/tau_proj_prep/OUT_train_zero_based_yolo.txt') as f:
+        lines_multi = f.readlines()
+    np.random.seed(10101)
+    np.random.shuffle(lines_multi)
+    np.random.seed(None)
 
+    num_train = int(0.8 * len(lines_multi))
+
+    idxs_train = [i for i in range(num_train)]
+    idxs_val = [i for i in range(num_train, len(lines_multi))]
+    train_post_classifier(lines_multi, idxs_train, idxs_val)
+
+    """
     x = imread('./Dog.jpg')
     xx = PIL.Image.open('./Dog.jpg')
 #    cropped = xx.resize(network_input_shape['resnet'])
@@ -308,6 +320,7 @@ def main():
 #    x = resize(x, (224, 224)) * 255  # cast back to 0-255 range
 #    x = preprocess_input(x)
 #    x = np.expand_dims(x, 0)
+    """
 
 if __name__ == "__main__":
     main()
