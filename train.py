@@ -14,6 +14,7 @@ from yolo3.model import preprocess_true_boxes, yolo_body, tiny_yolo_body, yolo_l
 from yolo3.utils import get_random_data
 
 from classification_train import train_post_classifier
+#from resnet_classifiers import train_post_classifier
 
 def _main():
 
@@ -85,10 +86,10 @@ def _main():
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1)
     early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1)
 
-    val_split = 0.1
+    val_split = 0.20
     with open(annotation_path) as f:
         lines = f.readlines()
-    np.random.seed(10101)
+    np.random.seed(11111)
     np.random.shuffle(lines)
     np.random.seed(None)
     num_val = int(len(lines)*val_split)
@@ -137,7 +138,7 @@ def _main():
     # Further training if needed.
     print("\n====done training YOLOv3 model====\n")
 
-    print("\n==== Training SVM for classification ====\n")
+    print("\n==== Training post classification ====\n")
     with open(annotations_multi_path) as f:
         lines_multi = f.readlines()
     np.random.seed(10101)
