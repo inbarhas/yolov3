@@ -151,7 +151,11 @@ def train_classifier(model, dataset, prep_func, optimzer, lr, net):
     datagen_test.fit(val_data)
 
     epochs = 24
-    batch_size = 32
+    if len(val_data) > 32:
+        batch_size = 32
+    else:
+        batch_size = 16
+    print("batch size {}".format(batch_size))
     steps_per_epoch = int(len(train_data) / batch_size)
     steps_per_epoch_val = int(len(val_data) / batch_size)
     print("steps per epoch : {}, val : {}".format(steps_per_epoch, steps_per_epoch_val))

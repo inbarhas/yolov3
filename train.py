@@ -103,12 +103,14 @@ def _main():
             'yolo_loss': lambda y_true, y_pred: y_pred})
 
         batch_size = 32
+        batch_size_val = min(32, num_val)
         print('Train on {} samples, val on {} samples, with batch size {}.'.format(num_train, num_val, batch_size))
+        print('train steps {}, val steps {}'.format(num_train//batch_size, max(1, num_val//batch_size_val)))
         print('Initial training - freezed layers : {}'.format(fr_last))
         model.fit_generator(data_generator_wrapper(lines[:num_train], batch_size, input_shape, anchors, num_classes),
                 steps_per_epoch=max(1, num_train//batch_size),
-                validation_data=data_generator_wrapper(lines[num_train:], batch_size, input_shape, anchors, num_classes),
-                validation_steps=max(1, num_val//batch_size),
+                validation_data=data_generator_wrapper(lines[num_train:], batch_size_val, input_shape, anchors, num_classes),
+                validation_steps=max(1, num_val//batch_size_val),
                 epochs=n_epochs,
                 initial_epoch=0,
                 callbacks=[logging, checkpoint])
@@ -125,10 +127,11 @@ def _main():
 
         batch_size = 16 # note that more GPU memory is required after unfreezing the body
         print('Train on {} samples, val on {} samples, with batch size {}.'.format(num_train, num_val, batch_size))
+        print('train steps {}, val steps {}'.format(num_train//batch_size, max(1, num_val//batch_size_val)))
         model.fit_generator(data_generator_wrapper(lines[:num_train], batch_size, input_shape, anchors, num_classes),
             steps_per_epoch=max(1, num_train//batch_size),
-            validation_data=data_generator_wrapper(lines[num_train:], batch_size, input_shape, anchors, num_classes),
-            validation_steps=max(1, num_val//batch_size),
+            validation_data=data_generator_wrapper(lines[num_train:], batch_size_val, input_shape, anchors, num_classes),
+            validation_steps=max(1, num_val//batch_size_val),
             epochs=n_epochs + n_tune,
             initial_epoch=n_epochs,
             callbacks=[logging, checkpoint, reduce_lr, early_stopping])
@@ -141,15 +144,19 @@ def _main():
     print("\n==== Training post classification ====\n")
     with open(annotations_multi_path) as f:
         lines_multi = f.readlines()
-    np.random.seed(10101)
+    np.random.seed(11111)
     np.random.shuffle(lines_multi)
     np.random.seed(None)
 
     idxs_train = [i for i in range(num_train)]
     idxs_val = [i for i in range(num_train, len(lines))]
     train_post_classifier(lines_multi, idxs_train, idxs_val)
-    print("Done training SVM")
-
+    print("Done training post classifier")
+    val_of = 'val_lines.txt'
+    with open(val_of, 'w') as of:
+        print("validation written to {}".format(val_of))
+        for idx_val in idxs_val:
+            of.write(lines_multi[idx_val].split()[0] + '\n')
     print("DONE TRAINING - END OF FILE")
 
 def get_classes(classes_path):
