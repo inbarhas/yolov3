@@ -81,15 +81,15 @@ def _main():
             loss_deg=loss_deg) # make sure you know what you freeze
 
     logging = TensorBoard(log_dir=log_dir)
-    checkpoint = ModelCheckpoint(log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
-        monitor='val_loss', save_weights_only=True, save_best_only=True, period=3)
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1)
+    checkpoint = ModelCheckpoint(log_dir + 'best_model_yolo3.h5',
+        monitor='val_loss', save_weights_only=True, save_best_only=True, period=1)
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, verbose=1)
     early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1)
 
     val_split = 0.20
     with open(annotation_path) as f:
         lines = f.readlines()
-    np.random.seed(11111)
+    np.random.seed(444)
     np.random.shuffle(lines)
     np.random.seed(None)
     num_val = int(len(lines)*val_split)
@@ -144,7 +144,7 @@ def _main():
     print("\n==== Training post classification ====\n")
     with open(annotations_multi_path) as f:
         lines_multi = f.readlines()
-    np.random.seed(11111)
+    np.random.seed(444)
     np.random.shuffle(lines_multi)
     np.random.seed(None)
 
