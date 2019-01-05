@@ -6,7 +6,7 @@ from yolo import YOLO, detect_video
 from classification_train import get_resnet50
 import logging
 
-
+"""
 def maya_run(myAnnFileName, buses):
 	
     annFileNameGT = os.path.join(os.getcwd(),'annotationsTrain.txt')
@@ -39,23 +39,23 @@ def maya_run(myAnnFileName, buses):
                     strToWrite += ','
         annFileEstimations.write(strToWrite)
 # End
+"""
 
 
 def run(estimatedAnnFileName, busDir):
     classificator = {}
     logging.debug("loading classifier : resnet50")
-    get_resnet50.load_weights(os.path.join('model_data', 'vgg_full_trained_weights_final.h5'))
+    resnet50 = get_resnet50(num_classes=6)
+    resnet50.load_weights('resnet50_best.h5')
     #    print("loading classifier : mobilenet")
     #    mobilenet = mobilenet1_get_model(num_classes=4) # TODO change this one moving to final dataset
     #    mobilenet.load_weights(os.path.join('model_data', 'mobilenet_final_weights.h5'))
 
-    classificator['svm'] = cls
-    classificator['vgg'] = vgg_double
-    #   classificator['mobilenet'] = mobilenet
+    classificator['resnet50'] = resnet50
 
     yolo_args = {
-        'model_path': os.path.join('proj_models', 'final_single_cust_loss4_anchs.h5'),
-        'anchors_path': os.path.join('model_data', 'bus_anchors.txt'),
-        'classes_path': os.path.join('model_data', 'bus_classes_single.txt'),
+        'model_path': 'final_single_cust_loss4_anchs.h5',
+        'anchors_path': 'bus_anchors.txt',
+        'classes_path': 'bus_classes_single.txt',
     }
     detect_img(YOLO(**yolo_args), imgs_path=busDir, outf=estimatedAnnFileName, cls=classificator, remap=True, visualize=False)

@@ -1,17 +1,12 @@
-import sys
-import argparse
-from yolo import YOLO, detect_video
+from yolo import YOLO
 from PIL import Image
 import os
 from matplotlib import pyplot
 import numpy as np
-from sklearn.externals import joblib
-from keras.applications.vgg16 import VGG16
-from keras.applications.vgg16 import preprocess_input
-from keras.optimizers import SGD
-from keras.models import Model
-from classification_train import predict_class, mobilenet1_get_model, vgg16_get_model
+from classification_train import predict_class
 import logging
+from classification_train import get_resnet50
+
 
 classes_remap = {
     0: 1, # Green
@@ -50,6 +45,11 @@ def detect_img(yolo, imgs_path, outf, cls=None, remap=False, visualize=False):
                     if remap:
                         predicted_class = classes_remap[int(predicted_class)]
 
+                    y1 = max(0, np.floor(y1 + 0.5).astype('int32'))
+                    x1 = max(0, np.floor(x1 + 0.5).astype('int32'))
+                    y2 = min(image.size[1], np.floor(y2 + 0.5).astype('int32'))
+                    x2 = min(image.size[0], np.floor(x2 + 0.5).astype('int32'))
+
                     output_line += "[{},{},{},{},{}]".format(x1, y1, x2 - x1, y2 - y1, predicted_class)
                     if i < (len(boxes) - 1):
                         output_line += ','
@@ -60,6 +60,8 @@ def detect_img(yolo, imgs_path, outf, cls=None, remap=False, visualize=False):
                 logging.debug(output_line)
 
                 if r_image:
+                    # visualization is done by obtaining the image that was drawn in the yolo detection, without class remap - so for each class
+                    # needs to add +1 to get actual class
                     pyplot.figure()
                     pyplot.imshow(np.asarray(r_image))
                     pyplot.show()
@@ -67,57 +69,28 @@ def detect_img(yolo, imgs_path, outf, cls=None, remap=False, visualize=False):
     yolo.close_session()
 
 
-FLAGS = None
-
-if __name__ == '__main__':
-    # class YOLO defines the default value, so suppress any default here
-    parser = argparse.ArgumentParser(argument_default=argparse.SUPPRESS)
-    '''
-    Command line options
-    '''
-    parser.add_argument(
-        '--model', type=str, dest='model_path',
-        help='path to model weight file, default ' + YOLO.get_defaults("model_path")
-    )
-    parser.add_argument(
-        '--anchors', type=str,dest='anchors_path',
-        help='path to anchor definitions, default ' + YOLO.get_defaults("anchors_path")
-    )
-    parser.add_argument(
-        '--classes', type=str, dest='classes_path',
-        help='path to class definitions, default ' + YOLO.get_defaults("classes_path")
-    )
-    parser.add_argument('--path', type=str, help='test path')
-    FLAGS = parser.parse_args()
+from optparse import OptionParser
+def main():
+    parser = OptionParser()
+    parser.add_option("-p", "--path", dest="path")
+    parser.add_option("-o", "--out", dest="outf")
+    (options, args) = parser.parse_args()
 
     classificator = {}
-    print("loading classifier : svm / vgg")
-    cls = joblib.load('model_data/svm.dump')
-    vgg_double, _ = vgg16_get_model(num_classes=4)
-    print("loading vgg weights")
-    vgg_double.load_weights('model_data/vgg_full_trained_weights_final.h5')
-#    print("loading classifier : mobilenet")
-#    mobilenet = mobilenet1_get_model(num_classes=4) # TODO change this one moving to final dataset
-#    mobilenet.load_weights('model_data/mobilenet_final_weights.h5')
+    logging.debug("loading classifier : resnet50")
+    resnet50 = get_resnet50(num_classes=6, w=None)
+    resnet50.load_weights('resnet50_best.h5')
 
-    classificator['svm'] = cls
-    classificator['vgg'] = vgg_double
- #   classificator['mobilenet'] = mobilenet
+    classificator['resnet50'] = resnet50
 
-    """
-    Image detection mode, disregard any remaining command line arguments
-    """
-    print("Image detection mode")
-    if "input" in FLAGS:
-        print(" Ignoring remaining command line arguments: " + FLAGS.input + "," + FLAGS.output)
-
-    detect_img(YOLO(**vars(FLAGS)), imgs_path=FLAGS.path, outf='result.txt', remap=False, cls=classificator, visualize=True)
-
-    """
     yolo_args = {
-        'model_path': os.path.join('proj_models', 'final_single_cust_loss4_anchs.h5'),
-        'anchors_path': os.path.join('model_data', 'bus_anchors.txt'),
-        'classes_path': os.path.join('model_data', 'bus_classes_single.txt'),
+        'model_path': 'final_single_cust_loss4_anchs.h5',
+        'anchors_path': 'bus_anchors.txt',
+        'classes_path': 'bus_classes_single.txt',
     }
-    detect_img(YOLO(**yolo_args), FLAGS.path, classificator, visualize=True)
-    """
+    detect_img(YOLO(**yolo_args), imgs_path=options.path, outf=options.outf, cls=classificator, remap=True,
+               visualize=True)
+
+
+if __name__ == "__main__":
+    main()

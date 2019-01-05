@@ -115,8 +115,8 @@ def process_lines(lines, net_type='resnet50'):
     return data, y
 # End
 
-def get_resnet50(num_classes):
-    base_model = ResNet50(include_top=False, weights='imagenet', input_shape=(224, 224, 3), pooling='avg')
+def get_resnet50(num_classes, w = 'imagenet'):
+    base_model = ResNet50(include_top=False, weights=w, input_shape=(224, 224, 3), pooling='avg')
     for layer in base_model.layers:
 #        print("freezing layer {}".format(layer.name))
         layer.trainable = False
@@ -192,6 +192,7 @@ def train_classifier(model, dataset, prep_func, optimzer, lr, net):
                         callbacks=[checkpoint, reduce_lr, early_stopping])
     print("restore best weights from checkpoint ({})".format(log_dir))
     model.load_weights(log_dir)
+    model.save_weights(log_dir)
     return model
 
 
