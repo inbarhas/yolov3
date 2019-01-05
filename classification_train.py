@@ -137,20 +137,20 @@ def train_classifier(model, dataset, prep_func, optimzer, lr, net):
     print("len of val = {}".format(len(val_data)))
 
     # define input data generators
-    shift = 0.05
-    datagen_train = ImageDataGenerator(rotation_range=10, width_shift_range=shift, height_shift_range=shift,
+    shift = 0.10
+    datagen_train = ImageDataGenerator(rotation_range=15, width_shift_range=shift, height_shift_range=shift,
                                        preprocessing_function=prep_func,
-                                       horizontal_flip=True, zoom_range=0.2)
+                                       horizontal_flip=True, zoom_range=0.1)
     datagen_train.fit(train_data)
 
     # For validation, do not rotate. do less augmentation
     shift = 0.05
     datagen_test = ImageDataGenerator(preprocessing_function=prep_func,
                                       width_shift_range=shift, height_shift_range=shift,
-                                      horizontal_flip=True, zoom_range=0.2)
+                                      horizontal_flip=True, zoom_range=0.1)
     datagen_test.fit(val_data)
 
-    epochs = 32
+    epochs = 24
     batch_size = 32
     steps_per_epoch = int(len(train_data) / batch_size)
     steps_per_epoch_val = int(len(val_data) / batch_size)
@@ -162,6 +162,7 @@ def train_classifier(model, dataset, prep_func, optimzer, lr, net):
         opt = SGD(lr=lr, momentum=0.9, decay=0.0, nesterov=True)
     elif optimzer == 'SGD':
         opt = 'SGD'
+
 
     model.compile(loss='categorical_crossentropy',
                   optimizer=opt,
@@ -178,18 +179,18 @@ def train_classifier(model, dataset, prep_func, optimzer, lr, net):
                         validation_steps=steps_per_epoch_val)
 
     print("Adding reduceLR callback, early stop")
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=5, verbose=1, cooldown=5)
-    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1)
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1, cooldown=3)
+#    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1)
 
-    model.compile(loss='categorical_crossentropy',
-                  optimizer=opt,
-                  metrics=['accuracy'])
+#    model.compile(loss='categorical_crossentropy',
+#                  optimizer=opt,
+#                  metrics=['accuracy'])
 
     model.fit_generator(datagen_train.flow(train_data, train_y, batch_size=batch_size),
                         steps_per_epoch=steps_per_epoch, epochs=2 * epochs, initial_epoch=epochs,
                         validation_data=datagen_test.flow(val_data, val_y, batch_size=batch_size),
                         validation_steps=steps_per_epoch_val,
-                        callbacks=[checkpoint, reduce_lr, early_stopping])
+                        callbacks=[checkpoint, reduce_lr])
     print("restore best weights from checkpoint")
     model.load_weights(log_dir)
 
@@ -214,8 +215,8 @@ def train_post_classifier(lines, idxs_train, idxs_val):
     print("num classes {}".format(num_classes))
     print("classes list {}".format(classes_list))
     # Grid search over optimizerss and lr's
-    opts = ['adam', 'sgd']
-    lrs = [0.01, 0.001]
+    opts = ['adam', ]
+    lrs = [0.01]
 
     for opt in opts:
         for lr in lrs:
