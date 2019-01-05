@@ -45,7 +45,7 @@ def maya_run(myAnnFileName, buses):
 def run(estimatedAnnFileName, busDir):
     classificator = {}
     logging.debug("loading classifier : resnet50")
-    resnet50 = get_resnet50(num_classes=6)
+    resnet50 = get_resnet50(num_classes=6, w=None)
     resnet50.load_weights('resnet50_best.h5')
     #    print("loading classifier : mobilenet")
     #    mobilenet = mobilenet1_get_model(num_classes=4) # TODO change this one moving to final dataset
