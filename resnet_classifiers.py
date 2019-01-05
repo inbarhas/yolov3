@@ -136,15 +136,22 @@ def process_lines(lines, net_type='resnet'):
 # End
 
 
+from keras.layers import GlobalAveragePooling2D, Dense, Activation, Dropout, AveragePooling2D, Flatten
+
 def get_resnet18(num_classes):
     # build model
     base_model = ResNet18(input_shape=(224, 224, 3), weights='imagenet', include_top=False)
-    x = keras.layers.AveragePooling2D((7, 7))(base_model.output)
-    x = keras.layers.Dropout(0.3)(x)
-    output = keras.layers.Dense(num_classes)(x)
-    model = keras.models.Model(inputs=[base_model.input], outputs=[output])
-    #print("resnet18 summary:")
-    #model.summary()
+    for layer in base_model.layers:
+        layer.trainable = False
+
+    x = GlobalAveragePooling2D(name='pool1')(base_model.output)
+    x = Dropout(0.5)(x)
+    x = Dense(num_classes, name='fc1')(x)
+    x = Activation('softmax', name='softmax')(x)
+
+    model = keras.models.Model(inputs=[base_model.input], outputs=[x])
+    print("resnet18 summary:")
+    model.summary()
     return model
 # End
 
@@ -152,12 +159,17 @@ def get_resnet18(num_classes):
 def get_resnet34(num_classes):
     # build model
     base_model = ResNet34(input_shape=(224, 224, 3), weights='imagenet', include_top=False)
-    x = keras.layers.AveragePooling2D((7, 7))(base_model.output)
-    x = keras.layers.Dropout(0.3)(x)
-    output = keras.layers.Dense(num_classes)(x)
-    model = keras.models.Model(inputs=[base_model.input], outputs=[output])
-    #print("resnet34 summary:")
-    #model.summary()
+    for layer in base_model.layers:
+        layer.trainable = False
+
+    x = GlobalAveragePooling2D(name='pool1')(base_model.output)
+    x = Dropout(0.5)(x)
+    x = Dense(num_classes, name='fc1')(x)
+    x = Activation('softmax', name='softmax')(x)
+
+    model = keras.models.Model(inputs=[base_model.input], outputs=[x])
+    print("resnet34 summary:")
+    model.summary()
     return model
 # End
 
@@ -200,6 +212,9 @@ def train_classifier(model, dataset, net='resnetN'):
                         steps_per_epoch=steps_per_epoch, epochs=epochs, initial_epoch=0,
                         validation_data=datagen_test.flow(val_data, val_y, batch_size=batch_size),
                         validation_steps=steps_per_epoch_val, callbacks=[checkpoint])
+#    model.fit(train_data, train_y, validation_split=0.1,
+#                        steps_per_epoch=steps_per_epoch, epochs=epochs, initial_epoch=0,
+#                        callbacks=[checkpoint])
 
     print("Second step - add reduce LR callback & early stop")
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=5, verbose=1, cooldown=5)
@@ -235,23 +250,23 @@ def train_post_classifier(lines, idxs_train, idxs_val):
     print("classes list {}".format(classes_list))
 
     resnet18 = get_resnet18(num_classes)
-    resnet34 = get_resnet34(num_classes)
+    #resnet34 = get_resnet34(num_classes)
     print("========= Training resnet18")
     train_classifier(resnet18, [train_data, cat_y, val_data, cat_vy], 'resnet18')
-#    print("========= Training resnet34")
+    print("========= Training resnet34")
 #    train_classifier(resnet34, [train_data, cat_y, val_data, cat_vy], 'resnet34')
-    print("===========================================")
-    prep = preprocess_input(val_data.copy)
-    print("==== test resnet18 ====")
-    print("y_gt : {}".format(vy))
-    preds_18 = resnet18.predict(prep)
-    print("preds_18:\n{}".format(preds_18))
-    preds = np.argmax(preds_18, axis=1)
-    print("\ty_18:{}\n".format(preds))
-    print("\nConfusion matrix:")
-    print(confusion_matrix(vy, preds))
-    print("\nClassification report:")
-    print(classification_report(vy, preds))
+#    print("===========================================")
+##    prep = preprocess_input(val_data.copy)
+ #   print("==== test resnet18 ====")
+ #   print("y_gt : {}".format(vy))
+#    preds_18 = resnet18.predict(prep)
+#    print("preds_18:\n{}".format(preds_18))
+#    preds = np.argmax(preds_18, axis=1)
+#    print("\ty_18:{}\n".format(preds))
+#    print("\nConfusion matrix:")
+#    print(confusion_matrix(vy, preds))
+#    print("\nClassification report:")
+#    print(classification_report(vy, preds))
 
     """
     print("===========================================")
@@ -280,6 +295,7 @@ def train_post_classifier(lines, idxs_train, idxs_val):
     """
 
 def main():
+
     with open('/home/tamir/PycharmProjects/tau_proj_prep/OUT_train_zero_based_yolo.txt') as f:
         lines_multi = f.readlines()
     np.random.seed(10101)
@@ -292,27 +308,19 @@ def main():
     idxs_val = [i for i in range(num_train, len(lines_multi))]
     train_post_classifier(lines_multi, idxs_train, idxs_val)
 
+
     """
-    x = imread('./Dog.jpg')
     xx = PIL.Image.open('./Dog.jpg')
-#    cropped = xx.resize(network_input_shape['resnet'])
     sample = image.img_to_array(xx, dtype=np.uint8)
-
     aaa = preprocess_input(sample, (224,224), True)
+    sample_preped = np.expand_dims(aaa, 0)
 
-    from matplotlib import pyplot
-    pyplot.figure()
-    pyplot.imshow(xx)
-    pyplot.show()
+    model = ResNet18(input_shape=(224, 224, 3), weights='imagenet', classes=1000)
+    # processing image
+    y = model.predict(sample_preped)
 
-    from matplotlib import pyplot
-    pyplot.figure()
-    pyplot.imshow(aaa)
-    pyplot.show()
-
-    sample_preped = np.expand_dims(sample, 0)
-    sample_preped = keras.applications.resnet50.preprocess_input(sample_preped)
-
+    # result
+    print(decode_predictions(y))
     print("end")
 
     # read and prepare image
